@@ -1,0 +1,27 @@
+{
+  "name": "ai-job-application-automation-platform",
+  "version": "1.0.0",
+  "description": "Full-stack AI Job Application Automation Platform with multi-resume management, Gemini AI cold outreach email generation, multi-HR dispatch, and CRM pipeline tracking.",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install"
+  },
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": [
+    "job-automation",
+    "ai",
+    "gemini",
+    "resume-builder",
+    "cold-email",
+    "mern",
+    "react",
+    "express",
+    "mongodb"
+  ],
+  "author": "",
+  "license": "ISC"
+}

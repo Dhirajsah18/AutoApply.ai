@@ -26,24 +26,24 @@ export const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#f2e9e4] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Luminous Light Ambient Glow Orbs */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-sky-500/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#06969C]/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#06969C]/10 rounded-full blur-[100px] pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-500 shadow-xl shadow-indigo-500/20 border border-white/60 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#06969C] via-[#058288] to-[#3eb8bf] shadow-xl shadow-[#06969C]/25 border border-white/60 mb-4">
             <Mail className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-            AutoApply<span className="text-indigo-600">AI</span>
+            AutoApply<span className="text-[#06969C]">AI</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-1">Smart Job Application & Outreach Automation</p>
         </div>
 
         {/* Luminous Glass Card */}
-        <div className="neo-card p-7 sm:p-8 border-t-4 border-t-indigo-600 shadow-xl">
+        <div className="neo-card p-7 sm:p-8 border-t-4 border-t-[#06969C] shadow-xl">
           {error && (
             <div className="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
               {error}

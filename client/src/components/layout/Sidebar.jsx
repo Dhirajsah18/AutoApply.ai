@@ -50,12 +50,12 @@ export const Sidebar = ({ isOpen, onClose }) => {
         <div>
           <div className="h-16 flex items-center justify-between px-5 sm:px-6 border-b border-slate-200/70">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#06969C] via-[#058288] to-[#3eb8bf] flex items-center justify-center text-white shadow-md shadow-[#06969C]/25">
                 <Mail className="w-5 h-5" />
               </div>
               <div>
                 <h1 className="font-extrabold text-sm text-slate-900 tracking-tight flex items-center gap-1">
-                  AutoApply<span className="text-indigo-600">.ai</span>
+                  AutoApply<span className="text-[#06969C]">.ai</span>
                 </h1>
                 <p className="text-[11px] text-slate-500 font-medium">Job Outreach</p>
               </div>

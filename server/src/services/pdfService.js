@@ -46,44 +46,81 @@ export const generateResumePdf = (resume) => {
         doc.y = y + 4;
       };
 
-      // 1. CANDIDATE NAME (Centered, Large Serif)
-      const fullName = (p.fullName || 'Dhiraj Kumar Sah').toUpperCase();
+      // Helper for Title Case capitalization (First letter capitalized)
+      const formatCapitalize = (str) => {
+        if (!str) return '';
+        if (str === str.toUpperCase() || str === str.toLowerCase()) {
+          return str
+            .toLowerCase()
+            .split(' ')
+            .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ''))
+            .join(' ');
+        }
+        return str;
+      };
+
+      // 1. CANDIDATE NAME (Centered, Large Serif, First Letter Caps)
+      const rawName = p.fullName || 'Dhiraj Kumar Sah';
+      const fullName = formatCapitalize(rawName);
       doc.font('Times-Bold').fontSize(18).fillColor('#000000').text(fullName, {
         align: 'center',
-        characterSpacing: 0.5,
+        characterSpacing: 0.3,
       });
       doc.moveDown(0.2);
 
-      // 2. CONTACT DETAILS LINE (Centered, with clickable links)
+      // 2. CONTACT DETAILS LINE (Centered, with clickable & underlined links)
       const contactParts = [];
-      if (p.phone) contactParts.push({ text: p.phone, link: `tel:${p.phone.replace(/[^0-9+]/g, '')}` });
-      if (p.email) contactParts.push({ text: p.email, link: `mailto:${p.email}` });
-      if (p.linkedin) {
-        const linkUrl = p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`;
-        const label = p.linkedin.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, '').replace(/\/$/, '') || 'LinkedIn';
-        contactParts.push({ text: label, link: linkUrl });
-      }
+      if (p.phone) contactParts.push({ text: p.phone, link: `tel:${p.phone.replace(/[^0-9+]/g, '')}`, isLink: false });
+      if (p.email) contactParts.push({ text: p.email, link: `mailto:${p.email}`, isLink: true });
       if (p.github) {
         const linkUrl = p.github.startsWith('http') ? p.github : `https://${p.github}`;
-        const label = p.github.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\/$/, '') || 'GitHub';
-        contactParts.push({ text: label, link: linkUrl });
+        contactParts.push({ text: 'GitHub', link: linkUrl, isLink: true });
+      }
+      if (p.linkedin) {
+        const linkUrl = p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`;
+        contactParts.push({ text: 'LinkedIn', link: linkUrl, isLink: true });
       }
       if (p.portfolio) {
         const linkUrl = p.portfolio.startsWith('http') ? p.portfolio : `https://${p.portfolio}`;
-        contactParts.push({ text: 'Portfolio', link: linkUrl });
+        contactParts.push({ text: 'Portfolio', link: linkUrl, isLink: true });
       }
 
-      // Render Contact line
+      // Render Contact line with underlines for clickable links
       if (contactParts.length > 0) {
-        const contactY = doc.y;
-        doc.font('Times-Roman').fontSize(9.5).fillColor('#000000');
-        
-        // Calculate total text width for centering
-        let totalStr = contactParts.map(c => c.text).join('   |   ');
-        doc.text(totalStr, leftMargin, contactY, {
-          align: 'center',
-          width: contentWidth,
+        doc.font('Times-Roman').fontSize(9.5);
+        const sep = '   |   ';
+        const sepWidth = doc.widthOfString(sep);
+
+        let totalLineWidth = 0;
+        contactParts.forEach((cp, idx) => {
+          totalLineWidth += doc.widthOfString(cp.text);
+          if (idx < contactParts.length - 1) totalLineWidth += sepWidth;
         });
+
+        let currentX = leftMargin + Math.max(0, (contentWidth - totalLineWidth) / 2);
+        const contactY = doc.y;
+
+        contactParts.forEach((cp, idx) => {
+          const textWidth = doc.widthOfString(cp.text);
+          if (cp.isLink) {
+            doc.fillColor('#000000').text(cp.text, currentX, contactY, {
+              link: cp.link,
+              underline: true,
+              continued: false,
+            });
+          } else {
+            doc.fillColor('#000000').text(cp.text, currentX, contactY, {
+              underline: false,
+              continued: false,
+            });
+          }
+          currentX += textWidth;
+          if (idx < contactParts.length - 1) {
+            doc.fillColor('#000000').text(sep, currentX, contactY, { underline: false, continued: false });
+            currentX += sepWidth;
+          }
+        });
+        doc.y = contactY + doc.currentLineHeight() + 2;
       }
 
       // 3. SUMMARY SECTION

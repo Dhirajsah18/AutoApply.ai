@@ -67,6 +67,19 @@ const LinkedinIcon = ({ className = "w-3.5 h-3.5" }) => (
   </svg>
 );
 
+// Helper to format names to Title Case (First letter capitalized)
+const formatCapitalize = (str) => {
+  if (!str) return '';
+  if (str === str.toUpperCase() || str === str.toLowerCase()) {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ''))
+      .join(' ');
+  }
+  return str;
+};
+
 const getInitialResumeData = (user) => ({
   personalInfo: {
     fullName: user?.name || 'Dhiraj Kumar Sah',
@@ -1068,8 +1081,8 @@ export const ResumeBuilder = () => {
               >
                 {/* 1. Header: Name & Contact Row */}
                 <div className="text-center mb-3">
-                  <h1 className="text-2xl font-bold font-serif text-black tracking-wide uppercase">
-                    {p.fullName || 'Dhiraj Kumar Sah'}
+                  <h1 className="text-2xl font-bold font-serif text-black tracking-wide">
+                    {formatCapitalize(p.fullName || 'Dhiraj Kumar Sah')}
                   </h1>
 
                   {/* Contact links bar with icons */}
@@ -1077,31 +1090,15 @@ export const ResumeBuilder = () => {
                     {p.phone && (
                       <span className="inline-flex items-center gap-1">
                         <Phone className="w-3 h-3 text-black shrink-0" />
-                        <a href={`tel:${p.phone.replace(/[^0-9+]/g, '')}`} className="hover:underline">
-                          {p.phone}
-                        </a>
+                        <span>{p.phone}</span>
                       </span>
                     )}
 
                     {p.email && (
                       <span className="inline-flex items-center gap-1">
                         <Mail className="w-3 h-3 text-black shrink-0" />
-                        <a href={`mailto:${p.email}`} className="hover:underline">
+                        <a href={`mailto:${p.email}`} className="underline underline-offset-2 hover:text-cyan-800 transition-colors">
                           {p.email}
-                        </a>
-                      </span>
-                    )}
-
-                    {p.linkedin && (
-                      <span className="inline-flex items-center gap-1">
-                        <LinkedinIcon className="w-3 h-3 text-black shrink-0" />
-                        <a
-                          href={p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="hover:underline"
-                        >
-                          {p.fullName || 'LinkedIn'}
                         </a>
                       </span>
                     )}
@@ -1113,9 +1110,23 @@ export const ResumeBuilder = () => {
                           href={p.github.startsWith('http') ? p.github : `https://${p.github}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="hover:underline"
+                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
                         >
-                          {p.fullName || 'GitHub'}
+                          GitHub
+                        </a>
+                      </span>
+                    )}
+
+                    {p.linkedin && (
+                      <span className="inline-flex items-center gap-1">
+                        <LinkedinIcon className="w-3 h-3 text-black shrink-0" />
+                        <a
+                          href={p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
+                        >
+                          LinkedIn
                         </a>
                       </span>
                     )}
@@ -1127,7 +1138,7 @@ export const ResumeBuilder = () => {
                           href={p.portfolio.startsWith('http') ? p.portfolio : `https://${p.portfolio}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="hover:underline"
+                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
                         >
                           Portfolio
                         </a>

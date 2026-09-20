@@ -43,6 +43,7 @@ const userSchema = new mongoose.Schema({
     resendApiKey: { type: String, default: '' },
     geminiApiKey: { type: String, default: '' },
     openaiApiKey: { type: String, default: '' },
+    aiProvider: { type: String, enum: ['auto', 'gemini', 'openai'], default: 'auto' },
   },
 }, {
   timestamps: true,

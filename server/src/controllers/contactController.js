@@ -4,6 +4,7 @@ import {
   parseCsvOrDelimited,
   aiExtractFromPdfGemini,
   aiExtractFromText,
+  extractPdfText,
 } from '../services/contactExtractorService.js';
 
 export const listContacts = async (req, res, next) => {
@@ -163,10 +164,35 @@ export const extractContactsFromFile = async (req, res, next) => {
           });
         }
 
-        if (geminiApiKey) {
-          rawExtracted = await aiExtractFromPdfGemini(file.buffer, geminiApiKey);
+        const preferredProvider = user?.emailConfig?.aiProvider || (openaiApiKey ? 'openai' : 'gemini');
+
+        if (preferredProvider === 'openai' && openaiApiKey) {
+          try {
+            const pdfText = await extractPdfText(file.buffer);
+            rawExtracted = await aiExtractFromText(pdfText, { openaiApiKey });
+          } catch (pdfErr) {
+            console.warn('[PDF OpenAI extraction failed, trying Gemini if available]:', pdfErr.message);
+            if (geminiApiKey) {
+              rawExtracted = await aiExtractFromPdfGemini(file.buffer, geminiApiKey);
+            } else {
+              throw pdfErr;
+            }
+          }
+        } else if (geminiApiKey) {
+          try {
+            rawExtracted = await aiExtractFromPdfGemini(file.buffer, geminiApiKey);
+          } catch (geminiErr) {
+            console.warn('[Gemini PDF extraction failed, trying OpenAI fallback]:', geminiErr.message);
+            if (openaiApiKey) {
+              const pdfText = await extractPdfText(file.buffer);
+              rawExtracted = await aiExtractFromText(pdfText, { openaiApiKey });
+            } else {
+              throw geminiErr;
+            }
+          }
         } else if (openaiApiKey) {
-          rawExtracted = await aiExtractFromText(file.buffer.toString('utf-8', 0, 50000), { geminiApiKey, openaiApiKey });
+          const pdfText = await extractPdfText(file.buffer);
+          rawExtracted = await aiExtractFromText(pdfText, { openaiApiKey });
         }
       } else {
         return res.status(400).json({
@@ -213,10 +239,16 @@ export const extractContactsFromFile = async (req, res, next) => {
       contacts: cleanContacts,
     });
   } catch (err) {
-    console.error('[extractContactsFromFile Error]:', err);
-    res.status(500).json({
+    console.error('[extractContactsFromFile Error]:', err.message);
+    let cleanMsg = err.message || 'Failed to extract contacts from file.';
+    if (cleanMsg.includes('API key not valid') || cleanMsg.includes('API_KEY_INVALID')) {
+      cleanMsg = 'Invalid AI API Key. Please verify your OpenAI or Gemini key in Settings.';
+    } else if (cleanMsg.includes('quota') || cleanMsg.includes('RESOURCE_EXHAUSTED')) {
+      cleanMsg = 'AI API quota exceeded. Please check your account balance.';
+    }
+    res.status(400).json({
       success: false,
-      error: { message: err.message || 'Failed to extract contacts from file.' },
+      error: { message: cleanMsg },
     });
   }
 };

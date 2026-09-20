@@ -234,7 +234,14 @@ export const ContactsDirectory = () => {
         setExtractorError('No valid contacts could be extracted from this file.');
       }
     } catch (err) {
-      setExtractorError(err.response?.data?.error?.message || 'Failed to extract contacts from file.');
+      const rawMsg = err.response?.data?.error?.message || err.message || 'Failed to extract contacts.';
+      let cleanMsg = typeof rawMsg === 'string' ? rawMsg : JSON.stringify(rawMsg);
+      if (cleanMsg.includes('API key not valid') || cleanMsg.includes('API_KEY_INVALID')) {
+        cleanMsg = 'Invalid AI API Key. Please verify your OpenAI or Gemini key in Settings.';
+      } else if (cleanMsg.includes('quota') || cleanMsg.includes('RESOURCE_EXHAUSTED')) {
+        cleanMsg = 'AI API quota exceeded. Please check your account balance.';
+      }
+      setExtractorError(cleanMsg);
     } finally {
       setExtracting(false);
     }
@@ -661,28 +668,25 @@ export const ContactsDirectory = () => {
               /* State 1: Upload File */
               <div className="space-y-5">
                 <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-                    <Sparkles className="w-5 h-5 text-amber-300" />
+                  <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                    <Sparkles className="w-4 h-4 text-amber-300" />
                   </div>
                   <div>
-                    <h2 className="text-base font-extrabold text-slate-900">
-                      Extract Contacts from PDF / CSV
+                    <h2 className="text-sm font-extrabold text-slate-900">
+                      Extract Contacts
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Upload hiring lists, recruiter sheets, or PDF catalogs. AI automatically structures company names, emails, and roles.
-                    </p>
                   </div>
                 </div>
 
                 {extractorError && (
-                  <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span>{extractorError}</span>
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2.5 max-w-full overflow-hidden">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span className="break-all flex-1 leading-snug">{extractorError}</span>
                   </div>
                 )}
 
                 {/* Dropzone */}
-                <div className="relative border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-3xl p-6 sm:p-8 text-center bg-indigo-50/30 transition-all">
+                <div className="relative border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-3xl p-6 text-center bg-indigo-50/30 transition-all">
                   <input
                     type="file"
                     accept=".pdf,.csv,.txt"
@@ -692,48 +696,35 @@ export const ContactsDirectory = () => {
 
                   {extractorFile ? (
                     <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
+                      <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
                         {extractorFile.name.endsWith('.pdf') ? (
-                          <FileText className="w-6 h-6" />
+                          <FileText className="w-5 h-5" />
                         ) : (
-                          <FileSpreadsheet className="w-6 h-6" />
+                          <FileSpreadsheet className="w-5 h-5" />
                         )}
                       </div>
-                      <p className="text-sm font-black text-slate-800">{extractorFile.name}</p>
-                      <p className="text-xs text-slate-400 font-mono font-bold">
+                      <p className="text-xs font-bold text-slate-800 truncate max-w-xs">{extractorFile.name}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">
                         {(extractorFile.size / 1024).toFixed(1)} KB
                       </p>
-                      <span className="text-[11px] font-bold text-indigo-600 underline mt-1">
-                        Click or drop to replace file
+                      <span className="text-[11px] font-bold text-indigo-600 underline">
+                        Click or drop to replace
                       </span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-sm">
-                        <UploadCloud className="w-6 h-6" />
+                    <div className="flex flex-col items-center gap-1.5 py-2">
+                      <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-sm mb-1">
+                        <UploadCloud className="w-5 h-5" />
                       </div>
-                      <p className="text-sm font-extrabold text-slate-800">
-                        Choose or drag & drop a PDF or CSV file
+                      <p className="text-xs font-bold text-slate-800">
+                        Upload or drop PDF / CSV file
                       </p>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Supports <span className="font-bold text-slate-700">.PDF</span>, <span className="font-bold text-slate-700">.CSV</span>, and <span className="font-bold text-slate-700">.TXT</span> (Max 25MB)
+                      <p className="text-[11px] text-slate-400">
+                        PDF or CSV (Max 25MB)
                       </p>
                     </div>
                   )}
                 </div>
-
-                {/* API Key info banner */}
-                {!user?.emailConfig?.geminiApiKey && !user?.emailConfig?.openaiApiKey && (
-                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl text-[11.5px] text-amber-900 font-medium flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <strong>Note:</strong> CSV files are parsed instantly for free. For <strong>PDF documents</strong>, please ensure you have added your free Gemini API key in{' '}
-                      <Link to="/settings" className="font-bold underline text-indigo-700">
-                        Settings
-                      </Link>.
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex justify-end gap-2.5 pt-2">
                   <button
@@ -772,9 +763,6 @@ export const ContactsDirectory = () => {
                       <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                       Extracted Contacts ({extractedList.length})
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Verify or edit company details before importing. Uncheck rows you do not wish to save.
-                    </p>
                   </div>
 
                   <div className="flex items-center gap-2">

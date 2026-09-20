@@ -83,6 +83,24 @@ export const parseCsvOrDelimited = (text) => {
 };
 
 /**
+ * Extracts plain text from a PDF buffer using pdf-parse
+ */
+export const extractPdfText = async (buffer) => {
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: buffer });
+    await parser.load();
+    const result = await parser.getText();
+    if (typeof result === 'string') return result;
+    if (result && typeof result.text === 'string') return result.text;
+    return JSON.stringify(result);
+  } catch (err) {
+    console.warn('[extractPdfText warning]:', err.message);
+    return buffer.toString('utf-8');
+  }
+};
+
+/**
  * Extracts contacts from PDF using Gemini Multimodal
  */
 export const aiExtractFromPdfGemini = async (buffer, apiKey) => {

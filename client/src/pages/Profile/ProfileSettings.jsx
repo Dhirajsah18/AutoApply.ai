@@ -13,12 +13,15 @@ import {
   Server,
   Eye,
   EyeOff,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const ProfileSettings = () => {
   const { user, updateUserProfile } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -53,6 +56,7 @@ export const ProfileSettings = () => {
       resendApiKey: user?.emailConfig?.resendApiKey || '',
       geminiApiKey: user?.emailConfig?.geminiApiKey || '',
       openaiApiKey: user?.emailConfig?.openaiApiKey || '',
+      aiProvider: user?.emailConfig?.aiProvider || 'auto',
     },
   });
 
@@ -64,8 +68,12 @@ export const ProfileSettings = () => {
 
     try {
       await updateUserProfile(formData);
-      setSuccessMsg('Settings and credentials updated successfully!');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      setSuccessMsg('Settings saved successfully!');
+      setJustSaved(true);
+      setTimeout(() => {
+        setSuccessMsg('');
+        setJustSaved(false);
+      }, 3500);
     } catch (err) {
       setErrorMsg(err.response?.data?.error?.message || 'Failed to update settings');
     } finally {
@@ -74,25 +82,29 @@ export const ProfileSettings = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 mt-0.5 shadow-sm">
-          <Settings className="w-5 h-5" />
-        </div>
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-            Settings
-          </h1>
-          <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5">
-            Manage your candidate profile, AI settings, and email account.
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
+      {/* Floating Success Toast Popup */}
       {successMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 shadow-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> {successMsg}
+        <div className="fixed top-6 right-6 z-50 animate-in fade-in slide-in-from-top-3 duration-300 shadow-2xl">
+          <div className="bg-slate-900 text-white pl-4 pr-3 py-3 rounded-2xl border border-slate-700/80 flex items-center gap-3 shadow-2xl">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="pr-2">
+              <p className="text-xs font-black text-white">Settings Saved!</p>
+              <p className="text-[11px] text-slate-300">Your profile and credentials have been updated.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessMsg('');
+                setJustSaved(false);
+              }}
+              className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -214,6 +226,44 @@ export const ProfileSettings = () => {
             )}
           </div>
 
+          {/* AI Provider Preference */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-2">Preferred AI Engine</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {[
+                { id: 'auto', name: '⚡ Auto Detect', desc: 'Uses whichever key is active' },
+                { id: 'openai', name: '🟢 OpenAI (GPT-4o)', desc: 'Prioritize OpenAI API key' },
+                { id: 'gemini', name: '🔵 Google Gemini', desc: 'Prioritize Gemini (Free) key' },
+              ].map((prov) => {
+                const isSelected = (formData.emailConfig.aiProvider || 'auto') === prov.id;
+                return (
+                  <button
+                    key={prov.id}
+                    type="button"
+                    onClick={() =>
+                      setFormData({
+                        ...formData,
+                        emailConfig: { ...formData.emailConfig, aiProvider: prov.id },
+                      })
+                    }
+                    className={`p-3 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? 'bg-indigo-50/90 border-2 border-indigo-600 shadow-sm ring-2 ring-indigo-500/10'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+                    }`}
+                  >
+                    <p className={`text-xs font-black ${isSelected ? 'text-indigo-700' : 'text-slate-800'}`}>
+                      {prov.name}
+                    </p>
+                    <p className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-indigo-600' : 'text-slate-500'}`}>
+                      {prov.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -291,11 +341,9 @@ export const ProfileSettings = () => {
               </div>
             </div>
 
-            <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 font-medium leading-relaxed flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <strong>Mandatory for AI features:</strong> Each user must provide their own Gemini or OpenAI key. Your key is stored securely in your private profile and is never shared with or used by anyone else.
-              </div>
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 font-medium flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Keys are encrypted and stored in your private profile.</span>
             </div>
           </div>
         </div>
@@ -310,9 +358,6 @@ export const ProfileSettings = () => {
               <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
                 Email Service
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Choose how you want to send your emails.
-              </p>
             </div>
           </div>
 
@@ -320,9 +365,9 @@ export const ProfileSettings = () => {
             <label className="block text-xs font-bold text-slate-700 mb-2">Active Email Service</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { id: 'mock', name: 'Test Mode (Sandbox)', desc: 'Test without sending real emails' },
-                { id: 'smtp', name: 'Gmail / Custom SMTP', desc: 'Send from your personal Gmail or email' },
-                { id: 'resend', name: 'Resend API', desc: 'Send via Resend API key' },
+                { id: 'mock', name: 'Test Mode', desc: 'Sandbox (No real emails)' },
+                { id: 'smtp', name: 'Gmail / SMTP', desc: 'Send via Gmail App Password' },
+                { id: 'resend', name: 'Resend API', desc: 'Send via Resend API Key' },
               ].map((p) => {
                 const isActive = formData.emailConfig.provider === p.id;
                 return (
@@ -467,10 +512,28 @@ export const ProfileSettings = () => {
           <button
             type="submit"
             disabled={saving}
-            className="neo-btn-primary text-xs font-bold py-3 px-8 shadow-lg shadow-indigo-500/25 disabled:opacity-50"
+            className={`text-xs font-bold py-3 px-8 shadow-lg transition-all rounded-full flex items-center gap-2 ${
+              justSaved
+                ? 'bg-emerald-600 text-white shadow-emerald-500/30 ring-2 ring-emerald-500/20'
+                : 'neo-btn-primary shadow-indigo-500/25'
+            } disabled:opacity-50`}
           >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving Settings...' : 'Save All Settings'}
+            {saving ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Saving Settings...
+              </>
+            ) : justSaved ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                Settings Saved!
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save All Settings
+              </>
+            )}
           </button>
         </div>
       </form>

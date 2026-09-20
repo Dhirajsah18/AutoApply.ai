@@ -34,6 +34,21 @@ export const Navbar = ({ onMenuToggle = () => {} }) => {
   const pageInfo = getPageInfo();
   const provider = user?.emailConfig?.provider || 'mock';
 
+  const geminiKey = user?.emailConfig?.geminiApiKey?.trim();
+  const openaiKey = user?.emailConfig?.openaiApiKey?.trim();
+  const preferredAi = user?.emailConfig?.aiProvider || 'auto';
+
+  let activeAiBadge = null;
+  if (preferredAi === 'openai' && openaiKey) {
+    activeAiBadge = { label: 'ChatGPT Active', badgeClass: 'badge-lime', iconColor: 'text-emerald-600' };
+  } else if (preferredAi === 'gemini' && geminiKey) {
+    activeAiBadge = { label: 'Gemini Active', badgeClass: 'badge-cyan', iconColor: 'text-cyan-600' };
+  } else if (openaiKey) {
+    activeAiBadge = { label: 'ChatGPT Active', badgeClass: 'badge-lime', iconColor: 'text-emerald-600' };
+  } else if (geminiKey) {
+    activeAiBadge = { label: 'Gemini Active', badgeClass: 'badge-cyan', iconColor: 'text-cyan-600' };
+  }
+
   return (
     <header className="h-16 border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl px-4 sm:px-6 md:px-8 flex items-center justify-between shrink-0 z-20 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
       {/* Left: Mobile Menu Button & Breadcrumbs */}
@@ -72,11 +87,26 @@ export const Navbar = ({ onMenuToggle = () => {} }) => {
           <span>Engine: <strong className="text-indigo-700 uppercase font-bold">{provider}</strong></span>
         </div>
 
-        {/* AI Active Badge */}
-        <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full badge-lime text-[11px]">
-          <Sparkles className="w-3 h-3 text-emerald-600" />
-          <span>AI Active</span>
-        </div>
+        {/* Dynamic AI Status Badge */}
+        {activeAiBadge ? (
+          <Link
+            to="/settings"
+            title={`Active Engine: ${activeAiBadge.label}. Click to manage settings.`}
+            className={`hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full ${activeAiBadge.badgeClass} text-[11px] transition-all hover:opacity-90`}
+          >
+            <Sparkles className={`w-3 h-3 ${activeAiBadge.iconColor}`} />
+            <span>{activeAiBadge.label}</span>
+          </Link>
+        ) : (
+          <Link
+            to="/settings"
+            title="No AI API key configured. Click to configure in Settings."
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/90 border border-slate-200/90 text-[11px] text-slate-400 font-medium hover:text-slate-600 hover:border-slate-300 transition-colors"
+          >
+            <Sparkles className="w-3 h-3 text-slate-400" />
+            <span>AI Inactive</span>
+          </Link>
+        )}
 
         {/* Launch Outreach Pill */}
         <Link

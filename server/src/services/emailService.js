@@ -92,6 +92,10 @@ export const sendJobApplicationEmail = async ({
   const passAuth = user?.emailConfig?.smtpPass || ENV.SMTP_PASS;
   const secure = user?.emailConfig?.smtpSecure ?? (port === 465);
 
+  if (!userAuth || !passAuth) {
+    throw new Error('SMTP credentials (Sender Email and App Password) are required. Please configure your email credentials in Settings.');
+  }
+
   console.log(`[Email Service] Dispatching real email via SMTP (${host}:${port})`);
   console.log(`[Email Service] From: "${senderName}" <${userAuth || senderEmail}> -> To: <${to}>`);
 

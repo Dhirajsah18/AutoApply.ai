@@ -3,6 +3,7 @@ import { Application } from '../models/Application.js';
 import { Resume } from '../models/Resume.js';
 import { User } from '../models/User.js';
 import { sendJobApplicationEmail } from '../services/emailService.js';
+import { resolveResumeFilePath } from './resumeController.js';
 
 export const listApplications = async (req, res, next) => {
   try {
@@ -124,6 +125,7 @@ export const sendBatchApplications = async (req, res, next) => {
     }
 
     const results = [];
+    const validAttachmentPath = selectedResume ? await resolveResumeFilePath(selectedResume) : null;
 
     for (const item of items) {
       const companyName = item.companyName || 'Company';
@@ -163,7 +165,7 @@ export const sendBatchApplications = async (req, res, next) => {
           recipientName,
           subject,
           body,
-          attachmentPath: selectedResume?.filePath,
+          attachmentPath: validAttachmentPath,
           attachmentName: selectedResume?.originalFileName || `${user.name.replace(/\s+/g, '_')}_Resume.pdf`,
         });
 
@@ -259,13 +261,15 @@ export const sendFollowUpEmail = async (req, res, next) => {
     const followUpSubject = subject || `Following up: Application for ${application.position} - ${user.name}`;
     const followUpBody = body || `Hi ${application.recipientName},\n\nI hope you are doing well. I wanted to follow up on my application for the ${application.position} role at ${application.companyName}.\n\nPlease let me know if you need any additional information.\n\nBest regards,\n${user.name}`;
 
+    const followUpAttachmentPath = application.resumeId ? await resolveResumeFilePath(application.resumeId) : null;
+
     const sendResult = await sendJobApplicationEmail({
       user,
       to: application.recipientEmail,
       recipientName: application.recipientName,
       subject: followUpSubject,
       body: followUpBody,
-      attachmentPath: application.resumeId?.filePath,
+      attachmentPath: followUpAttachmentPath,
       attachmentName: application.resumeId?.originalFileName || 'Resume.pdf',
     });
 

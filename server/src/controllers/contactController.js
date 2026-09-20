@@ -1,4 +1,10 @@
 import { CompanyContact } from '../models/CompanyContact.js';
+import { ENV } from '../config/env.js';
+import {
+  parseCsvOrDelimited,
+  aiExtractFromPdfGemini,
+  aiExtractFromText,
+} from '../services/contactExtractorService.js';
 
 export const listContacts = async (req, res, next) => {
   try {
@@ -116,3 +122,102 @@ export const deleteContact = async (req, res, next) => {
     next(err);
   }
 };
+
+export const extractContactsFromFile = async (req, res, next) => {
+  try {
+    if (!req.file && !req.body?.text) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Please upload a PDF or CSV file.' },
+      });
+    }
+
+    const file = req.file;
+    const user = req.user;
+    const geminiApiKey = user?.emailConfig?.geminiApiKey || ENV.GEMINI_API_KEY;
+    const openaiApiKey = user?.emailConfig?.openaiApiKey || ENV.OPENAI_API_KEY;
+
+    let rawExtracted = [];
+
+    if (file) {
+      const isCsv = file.mimetype === 'text/csv' || 
+                    file.originalname.toLowerCase().endsWith('.csv') || 
+                    file.mimetype.includes('csv') || 
+                    file.mimetype.includes('text');
+      const isPdf = file.mimetype === 'application/pdf' || 
+                    file.originalname.toLowerCase().endsWith('.pdf');
+
+      if (isCsv) {
+        const text = file.buffer.toString('utf-8');
+        rawExtracted = parseCsvOrDelimited(text);
+        if (rawExtracted.length === 0 && (geminiApiKey || openaiApiKey)) {
+          rawExtracted = await aiExtractFromText(text, { geminiApiKey, openaiApiKey });
+        }
+      } else if (isPdf) {
+        if (!geminiApiKey && !openaiApiKey) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: 'AI API Key is required to extract contacts from PDF documents. Please configure your Gemini or OpenAI API Key in Settings.',
+            },
+          });
+        }
+
+        if (geminiApiKey) {
+          rawExtracted = await aiExtractFromPdfGemini(file.buffer, geminiApiKey);
+        } else if (openaiApiKey) {
+          rawExtracted = await aiExtractFromText(file.buffer.toString('utf-8', 0, 50000), { geminiApiKey, openaiApiKey });
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Unsupported file format. Please upload a PDF or CSV file.' },
+        });
+      }
+    } else if (req.body?.text) {
+      rawExtracted = parseCsvOrDelimited(req.body.text);
+      if (rawExtracted.length === 0 && (geminiApiKey || openaiApiKey)) {
+        rawExtracted = await aiExtractFromText(req.body.text, { geminiApiKey, openaiApiKey });
+      }
+    }
+
+    // Deduplicate and filter valid emails
+    const seenEmails = new Set();
+    const cleanContacts = [];
+
+    for (const item of rawExtracted) {
+      const email = (item.email || '').toLowerCase().trim();
+      if (!email || !email.includes('@') || seenEmails.has(email)) continue;
+      seenEmails.add(email);
+
+      cleanContacts.push({
+        companyName: (item.companyName || 'Hiring Company').trim(),
+        email,
+        contactName: (item.contactName || 'Hiring Manager').trim(),
+        position: (item.position || 'Software Engineer').trim(),
+        notes: (item.notes || '').trim(),
+        tags: ['Extracted Lead'],
+      });
+    }
+
+    if (cleanContacts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'No valid company email contacts could be found in the uploaded file.' },
+      });
+    }
+
+    res.json({
+      success: true,
+      count: cleanContacts.length,
+      contacts: cleanContacts,
+    });
+  } catch (err) {
+    console.error('[extractContactsFromFile Error]:', err);
+    res.status(500).json({
+      success: false,
+      error: { message: err.message || 'Failed to extract contacts from file.' },
+    });
+  }
+};
+

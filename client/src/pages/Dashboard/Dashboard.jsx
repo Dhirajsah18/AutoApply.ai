@@ -50,15 +50,24 @@ export const Dashboard = () => {
     responseRate: 0,
   };
 
-  const weeklyActivity = [
-    { day: 'Mon', count: 4, active: false },
-    { day: 'Tue', count: 7, active: false },
-    { day: 'Wed', count: 5, active: false },
-    { day: 'Thu', count: 8, active: false },
-    { day: 'Fri', count: 14, active: true },
-    { day: 'Sat', count: 6, active: false },
-    { day: 'Sun', count: 3, active: false },
+  const currentDayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
+  const trends = data?.applicationTrends || [
+    { date: 'Mon', sent: 0 },
+    { date: 'Tue', sent: 0 },
+    { date: 'Wed', sent: 0 },
+    { date: 'Thu', sent: 0 },
+    { date: 'Fri', sent: 0 },
+    { date: 'Sat', sent: 0 },
+    { date: 'Sun', sent: 0 },
   ];
+
+  const sentThisWeek = trends.reduce((sum, item) => sum + (item.sent || 0), 0);
+  const maxWeeklySent = Math.max(...trends.map((t) => t.sent || 0), 4);
+
+  const totalTracked = stats.totalApplications || 0;
+  const sentWidth = totalTracked > 0 ? Math.max(10, Math.round((stats.sentCount / totalTracked) * 100)) : 0;
+  const interviewWidth = totalTracked > 0 ? Math.round((stats.interviewCount / totalTracked) * 100) : 0;
+  const followUpWidth = totalTracked > 0 ? Math.round((stats.followUpDueCount / totalTracked) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -69,16 +78,33 @@ export const Dashboard = () => {
           <div>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overview</span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-3xl font-black text-slate-900">{stats.responseRate || 64}%</span>
+              <span className="text-3xl font-black text-slate-900">
+                {stats.totalApplications > 0 ? `${stats.responseRate}%` : '0%'}
+              </span>
               <span className="text-xs font-semibold text-slate-500">Response Rate</span>
             </div>
 
-            {/* Progress Line */}
-            <div className="mt-4 flex items-center gap-1.5 h-2 w-full rounded-full overflow-hidden bg-slate-200/80 p-0.5">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '45%' }} />
-              <div className="h-full bg-indigo-500 rounded-full" style={{ width: '35%' }} />
-              <div className="h-full bg-amber-500 rounded-full" style={{ width: '20%' }} />
-            </div>
+            {/* Dynamic Progress Line */}
+            {totalTracked > 0 ? (
+              <div className="mt-4 flex items-center gap-1.5 h-2 w-full rounded-full overflow-hidden bg-slate-200/80 p-0.5">
+                {sentWidth > 0 && (
+                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${sentWidth}%` }} title={`Sent: ${stats.sentCount}`} />
+                )}
+                {interviewWidth > 0 && (
+                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${interviewWidth}%` }} title={`Interviews: ${stats.interviewCount}`} />
+                )}
+                {followUpWidth > 0 && (
+                  <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${followUpWidth}%` }} title={`Follow-up Due: ${stats.followUpDueCount}`} />
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center h-2 w-full rounded-full overflow-hidden bg-slate-100 p-0.5">
+                <div className="h-full w-full bg-slate-200/50 rounded-full" />
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400 font-medium mt-2">
+              {totalTracked > 0 ? `${totalTracked} applications in outreach pipeline` : 'No applications sent yet'}
+            </p>
           </div>
 
           {/* Stat Pills */}
@@ -138,12 +164,21 @@ export const Dashboard = () => {
                   PDF
                 </div>
               </div>
-              <span className="text-xs text-slate-700 font-bold">Ready to Send</span>
+              <div>
+                <span className="text-xs text-slate-800 font-bold block">
+                  {stats.totalContacts} Contacts • {stats.totalResumes} Resumes
+                </span>
+                <span className="text-[10.5px] text-slate-400 font-medium">
+                  {stats.totalContacts > 0 ? 'Ready for email dispatch' : 'Add contacts to begin'}
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-extrabold text-emerald-700">Ready</span>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
+              stats.totalContacts > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${stats.totalContacts > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span className="text-[10px] font-extrabold">{stats.totalContacts > 0 ? 'Ready' : 'Setup'}</span>
             </div>
           </div>
 
@@ -166,35 +201,45 @@ export const Dashboard = () => {
           </div>
 
           <div>
-            <span className="text-3xl font-black text-slate-900">{stats.sentCount || 24}</span>
+            <span className="text-3xl font-black text-slate-900">{sentThisWeek}</span>
             <span className="text-xs font-semibold text-slate-500 ml-1.5">Sent this week</span>
           </div>
 
-          {/* Capsule Bar Chart */}
+          {/* Dynamic Real Capsule Bar Chart */}
           <div className="flex items-end justify-between gap-2 h-24 pt-2">
-            {weeklyActivity.map((item, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-1.5 flex-1">
-                <div className="w-full flex items-end justify-center h-16">
-                  <div
-                    className={`capsule-bar w-3 sm:w-3.5 ${item.active ? 'active' : ''}`}
-                    style={{ height: `${Math.max(20, (item.count / 14) * 100)}%` }}
-                  />
+            {trends.map((item, idx) => {
+              const isToday = item.date === currentDayName;
+              const hasActivity = (item.sent || 0) > 0;
+              const barPct = hasActivity ? Math.max(18, Math.round(((item.sent || 0) / maxWeeklySent) * 100)) : 8;
+
+              return (
+                <div key={idx} className="flex flex-col items-center gap-1.5 flex-1" title={`${item.date}: ${item.sent || 0} sent`}>
+                  <div className="w-full flex items-end justify-center h-16">
+                    <div
+                      className={`capsule-bar w-3 sm:w-3.5 transition-all duration-300 ${
+                        isToday ? 'active' : ''
+                      } ${!hasActivity ? '!bg-slate-200/80 !opacity-50' : ''}`}
+                      style={{ height: `${barPct}%` }}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-semibold ${isToday ? 'text-indigo-600 font-extrabold' : 'text-slate-500'}`}>
+                    {item.date}
+                  </span>
                 </div>
-                <span className={`text-[10px] font-semibold ${item.active ? 'text-indigo-600 font-extrabold' : 'text-slate-500'}`}>
-                  {item.day}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Status Box */}
           <div className="neo-inner p-3 text-[11px] space-y-1.5 bg-white/70 border border-slate-200/70 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-slate-600 font-medium">AI Assistant:</span>
-              <span className="text-emerald-600 font-bold">Online</span>
+              <span className="text-slate-600 font-medium">AI Outreach:</span>
+              <span className={`font-bold ${user?.emailConfig?.geminiApiKey || user?.emailConfig?.openaiApiKey ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {user?.emailConfig?.geminiApiKey || user?.emailConfig?.openaiApiKey ? 'Configured' : 'Key Needed'}
+              </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-600 font-medium">Email Service:</span>
+              <span className="text-slate-600 font-medium">Email Dispatch:</span>
               <span className="text-indigo-600 font-bold uppercase">{user?.emailConfig?.provider || 'Test Mode'}</span>
             </div>
           </div>

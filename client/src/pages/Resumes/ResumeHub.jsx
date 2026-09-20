@@ -14,6 +14,7 @@ import {
   Eye,
   FileUp,
   X,
+  Edit3,
 } from 'lucide-react';
 import api from '../../api/client';
 
@@ -29,6 +30,18 @@ export const ResumeHub = () => {
   });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  // Edit Resume State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingResume, setEditingResume] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    versionTag: 'Full Stack',
+    isDefault: false,
+    file: null,
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const fetchResumes = async () => {
     try {
@@ -46,6 +59,51 @@ export const ResumeHub = () => {
   useEffect(() => {
     fetchResumes();
   }, []);
+
+  const handleOpenEditModal = (resume) => {
+    setEditingResume(resume);
+    setEditFormData({
+      title: resume.title || '',
+      versionTag: resume.versionTag || 'Full Stack',
+      isDefault: resume.isDefault || false,
+      file: null,
+    });
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingResume) return;
+
+    setEditSaving(true);
+    setEditError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('title', editFormData.title);
+      formData.append('versionTag', editFormData.versionTag);
+      formData.append('isDefault', editFormData.isDefault);
+      if (editFormData.file) {
+        formData.append('file', editFormData.file);
+      }
+
+      const res = await api.patch(`/resumes/${editingResume._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data.success) {
+        setShowEditModal(false);
+        setEditingResume(null);
+        fetchResumes();
+      }
+    } catch (err) {
+      setEditError(err.response?.data?.error?.message || 'Failed to update resume.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -106,13 +164,14 @@ export const ResumeHub = () => {
       const response = await api.get(`/resumes/${resume._id}/download`, {
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', resume.originalFileName || `${resume.title}.pdf`);
+      link.setAttribute('download', resume.originalFileName || `${(resume.title || 'Resume').replace(/\s+/g, '_')}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
     } catch (err) {
       alert('Could not download file.');
     }
@@ -120,14 +179,22 @@ export const ResumeHub = () => {
 
   const handleViewResume = async (resume) => {
     try {
-      const response = await api.get(`/resumes/${resume._id}/download`, {
+      const response = await api.get(`/resumes/${resume._id}/download?inline=true`, {
         responseType: 'blob',
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const fileURL = window.URL.createObjectURL(blob);
+      const pdfWindow = window.open(fileURL, '_blank');
+      if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
+        const link = document.createElement('a');
+        link.href = fileURL;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
     } catch (err) {
-      alert('Could not open preview for this file.');
+      alert('Could not open preview for this file. ' + (err.response?.data?.error?.message || ''));
     }
   };
 
@@ -232,25 +299,35 @@ export const ResumeHub = () => {
               </div>
 
               {/* Actions Footer */}
-              <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => handleViewResume(resume)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5" /> View PDF
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleViewResume(resume)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-indigo-50 border border-indigo-100"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> View PDF
+                  </button>
 
-                <div className="flex items-center gap-1.5">
-                  {resume.type === 'builder' && (
+                  {resume.type === 'builder' ? (
                     <Link
                       to={`/resumes/builder/${resume._id}`}
-                      title="Edit in Builder"
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                      className="text-xs font-bold text-slate-700 hover:text-indigo-600 flex items-center gap-1.5 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-slate-200"
                     >
-                      <Sparkles className="w-4 h-4" />
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-600" /> Edit Resume
                     </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(resume)}
+                      className="text-xs font-bold text-slate-700 hover:text-indigo-600 flex items-center gap-1.5 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-slate-200"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-600" /> Edit Details
+                    </button>
                   )}
+                </div>
+
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => handleDownload(resume)}
@@ -390,7 +467,113 @@ export const ResumeHub = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Resume Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="neo-card p-6 max-w-md w-full bg-white/95 border border-slate-200/90 relative shadow-2xl">
+            <button
+              onClick={() => setShowEditModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-base font-extrabold text-slate-900 mb-1">
+              Edit Resume Details
+            </h2>
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              Update role title, category tag, or replace with an updated document.
+            </p>
+
+            {editError && (
+              <div className="p-3 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Resume Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Senior Full Stack Engineer"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Role / Version Tag</label>
+                <select
+                  value={editFormData.versionTag}
+                  onChange={(e) => setEditFormData({ ...editFormData, versionTag: e.target.value })}
+                  className="neo-select text-xs font-bold"
+                >
+                  <option value="Full Stack">Full Stack Engineer</option>
+                  <option value="Frontend">Frontend Developer</option>
+                  <option value="Backend">Backend Engineer</option>
+                  <option value="Data Science">Data & AI</option>
+                  <option value="Internship">Internship / Entry Level</option>
+                  <option value="Custom">Custom</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Replace File <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <div className="border border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-3.5 text-center cursor-pointer transition-colors bg-slate-50/70">
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setEditFormData({ ...editFormData, file: e.target.files[0] });
+                      }
+                    }}
+                    className="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3.5 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="editIsDefault"
+                  checked={editFormData.isDefault}
+                  onChange={(e) => setEditFormData({ ...editFormData, isDefault: e.target.checked })}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                />
+                <label htmlFor="editIsDefault" className="text-xs text-slate-700 font-bold cursor-pointer">
+                  Set as default resume
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="neo-btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="neo-btn-primary text-xs font-bold disabled:opacity-50"
+                >
+                  {editSaving ? 'Updating...' : 'Update Details'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 

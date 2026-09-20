@@ -72,6 +72,15 @@ Output format:
   "body": "Dear [RecipientName],\\n\\n[Email Body]\\n\\nBest regards,\\n[Candidate Name]"
 }`;
 
+  // Validation: Mandatory User AI API Key
+  if (!openaiApiKey && !geminiApiKey) {
+    const error = new Error('AI API Key is required. Please configure your personal Gemini or OpenAI API Key in Profile Settings to generate AI cold emails.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let lastError = null;
+
   // 1. Try OpenAI if API Key is configured
   if (openaiApiKey && (ENV.AI_PROVIDER === 'openai' || !geminiApiKey)) {
     try {
@@ -96,7 +105,8 @@ Output format:
         warnings: [],
       };
     } catch (err) {
-      console.warn('[OpenAI] Call failed, attempting fallback:', err.message);
+      console.warn('[OpenAI] Call failed:', err.message);
+      lastError = err;
     }
   }
 
@@ -119,44 +129,20 @@ Output format:
         warnings: [],
       };
     } catch (err) {
-      console.warn('[Gemini AI] Call failed or quota exceeded, falling back to smart template generator:', err.message);
+      console.warn('[Gemini AI] Call failed:', err.message);
+      lastError = err;
     }
   }
 
-  // 3. Smart Dynamic Fallback Generator (Always succeeds)
-  const greetings = recipientName && recipientName.toLowerCase() !== 'hiring manager' && recipientName.toLowerCase() !== 'hiring team'
-    ? `Dear ${recipientName},`
-    : `Dear Hiring Team at ${companyName},`;
+  // 3. If API keys were provided but all attempts failed, report the error to the user
+  if (lastError) {
+    const error = new Error(`AI generation failed with your API key: ${lastError.message || 'Invalid API Key or Quota Exceeded'}. Please check your key in Settings.`);
+    error.statusCode = 400;
+    throw error;
+  }
 
-  const skillsHighlight = candidateSkills ? `My core technical stack includes ${candidateSkills}.` : 'I have extensive hands-on experience delivering scalable software solutions.';
-  
-  const jdMention = jobDescription 
-    ? `Having reviewed the requirements for the ${position} role, I am confident that my background directly aligns with what ${companyName} is looking for.`
-    : `I have been following ${companyName}'s impressive work and would love to contribute to your team as a ${position}.`;
-
-  const subject = `Application for ${position} - ${candidateName}`;
-  const body = `${greetings}
-
-I hope this email finds you well.
-
-${jdMention} ${skillsHighlight}
-
-Throughout my career, I have focused on writing clean, maintainable code, designing scalable backend architectures, and crafting responsive user experiences. I thrive in high-ownership environments where I can solve challenging technical problems and deliver measurable product impact.
-
-I have attached my resume for your review. You can also explore my portfolio and code repositories:
-${candidatePortfolio ? `• Portfolio: ${candidatePortfolio}\n` : ''}${candidateGithub ? `• GitHub: ${candidateGithub}\n` : ''}${candidateLinkedin ? `• LinkedIn: ${candidateLinkedin}\n` : ''}
-I would welcome the opportunity to discuss how my skill set can support ${companyName}'s upcoming goals. Are you open for a brief 10-minute conversation this week?
-
-Thank you for your time and consideration.
-
-Warm regards,
-${candidateName}
-${user?.email ? user.email : ''}`;
-
-  return {
-    subject,
-    body: body.trim(),
-    generatedBy: 'smart-template-engine',
-    warnings: (openaiApiKey || geminiApiKey) ? [] : ['AI API Key not set. Used smart personalization template.'],
-  };
+  const error = new Error('Failed to generate AI email. Please verify your API key in Settings.');
+  error.statusCode = 400;
+  throw error;
 };
+

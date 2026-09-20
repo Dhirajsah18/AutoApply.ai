@@ -82,13 +82,13 @@ const formatCapitalize = (str) => {
 
 const getInitialResumeData = (user) => ({
   personalInfo: {
-    fullName: user?.name || 'Dhiraj Kumar Sah',
-    email: user?.email || 'dhirajsah2003@gmail.com',
-    phone: '+91-9434467669',
-    location: 'Siliguri, West Bengal',
-    portfolio: user?.links?.portfolio || 'https://personal-portfolio.dev',
-    github: user?.links?.github || 'https://github.com/Dhirajsah18',
-    linkedin: user?.links?.linkedin || 'https://linkedin.com/in/dhiraj-kumar-sah',
+    fullName: user?.name || 'Alex Morgan',
+    email: user?.email || 'alex.morgan@example.com',
+    phone: '+1 (555) 019-2834',
+    location: 'New York, NY',
+    portfolio: user?.links?.portfolio || 'https://alexmorgan.dev',
+    github: user?.links?.github || 'https://github.com/alexmorgan',
+    linkedin: user?.links?.linkedin || 'https://linkedin.com/in/alexmorgan',
   },
   summary:
     'Computer Science undergraduate with experience in building secure, scalable, and data-driven software applications. Hands-on experience in building and integrating secure authentication systems, REST APIs, and scalable backend architectures. Seeking opportunities to design, build, and maintain scalable, production-ready software systems.',

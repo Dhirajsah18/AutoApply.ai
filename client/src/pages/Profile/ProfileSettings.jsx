@@ -174,41 +174,48 @@ export const ProfileSettings = () => {
           </div>
         </div>
 
-        {/* Card 2: AI Settings */}
-        <div className="bg-white/80 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-              <Sparkles className="w-4 h-4" />
+        {/* Card 2: AI Configuration */}
+        <div className="bg-white/80 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-sm space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                  AI Outreach Settings
+                </h2>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Provide your personal API key to generate tailored cold outreach emails.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                AI Outreach Settings
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Powers AI personalized cold emails and application notes.
-              </p>
-            </div>
+            {(formData.emailConfig.geminiApiKey || formData.emailConfig.openaiApiKey) ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Key Required
+              </span>
+            )}
           </div>
 
-          <div className="space-y-3.5">
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">OpenAI API Key (Optional)</label>
-              <input
-                type="password"
-                placeholder="sk-proj-..."
-                value={formData.emailConfig.openaiApiKey || ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    emailConfig: { ...formData.emailConfig, openaiApiKey: e.target.value },
-                  })
-                }
-                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Gemini API Key (Optional)</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Gemini API Key <span className="text-emerald-600 font-semibold">(Recommended - 100% Free)</span>
+                </label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline inline-flex items-center gap-1"
+                >
+                  Get Free Key ↗
+                </a>
+              </div>
               <input
                 type="password"
                 placeholder="AIzaSy..."
@@ -223,9 +230,40 @@ export const ProfileSettings = () => {
               />
             </div>
 
-            <p className="text-[11px] text-slate-500 font-medium">
-              If left blank, the server default OpenAI / Gemini configuration is automatically used.
-            </p>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  OpenAI API Key
+                </label>
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-slate-500 hover:text-slate-700 hover:underline inline-flex items-center gap-1"
+                >
+                  OpenAI Console ↗
+                </a>
+              </div>
+              <input
+                type="password"
+                placeholder="sk-proj-..."
+                value={formData.emailConfig.openaiApiKey || ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    emailConfig: { ...formData.emailConfig, openaiApiKey: e.target.value },
+                  })
+                }
+                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
+              />
+            </div>
+
+            <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 font-medium leading-relaxed flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Mandatory for AI features:</strong> Each user must provide their own Gemini or OpenAI key. Your key is stored securely in your private profile and is never shared with or used by anyone else.
+              </div>
+            </div>
           </div>
         </div>
 

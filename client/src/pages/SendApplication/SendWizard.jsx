@@ -173,6 +173,12 @@ export const SendWizard = () => {
   });
 
   const handleGenerateAi = async () => {
+    const hasAiKey = Boolean(user?.emailConfig?.geminiApiKey || user?.emailConfig?.openaiApiKey);
+    if (!hasAiKey) {
+      alert('AI API Key is required! Please go to Settings and configure your personal Gemini (Free) or OpenAI API Key to generate AI emails.');
+      return;
+    }
+
     const sampleCompany = outreachMode === 'single'
       ? singleTarget.companyName
       : (contacts.find((c) => selectedContactIds.includes(c._id))?.companyName || 'Target Company');
@@ -688,7 +694,7 @@ export const SendWizard = () => {
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                  3. Write with AI (Optional)
+                  3. Write with AI
                 </span>
 
                 {templates.length > 0 && (
@@ -705,6 +711,15 @@ export const SendWizard = () => {
                   </select>
                 )}
               </div>
+
+              {!user?.emailConfig?.geminiApiKey && !user?.emailConfig?.openaiApiKey && (
+                <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-900 text-[11px] font-medium flex items-center justify-between">
+                  <span>⚠️ AI key needed to generate emails.</span>
+                  <Link to="/settings" className="font-bold underline text-indigo-600 hover:text-indigo-700">
+                    Add Free Key in Settings →
+                  </Link>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Job Description (Optional)</label>

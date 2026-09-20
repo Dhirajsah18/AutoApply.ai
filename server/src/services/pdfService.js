@@ -60,7 +60,7 @@ export const generateResumePdf = (resume) => {
       };
 
       // 1. CANDIDATE NAME (Centered, Large Serif, First Letter Caps)
-      const rawName = p.fullName || 'Dhiraj Kumar Sah';
+      const rawName = p.fullName || 'Candidate Name';
       const fullName = formatCapitalize(rawName);
       doc.font('Times-Bold').fontSize(18).fillColor('#000000').text(fullName, {
         align: 'center',

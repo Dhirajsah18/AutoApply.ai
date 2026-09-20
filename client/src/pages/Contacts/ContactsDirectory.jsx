@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -12,17 +12,37 @@ import {
   X,
   MapPin,
   Briefcase,
+  Sparkles,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  RefreshCw,
+  Check,
+  ArrowRight,
+  ExternalLink,
 } from 'lucide-react';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 export const ContactsDirectory = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // AI / File Extractor state
+  const [showExtractorModal, setShowExtractorModal] = useState(false);
+  const [extractorFile, setExtractorFile] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractorError, setExtractorError] = useState('');
+  const [extractedList, setExtractedList] = useState([]);
+  const [selectedExtractedIndices, setSelectedExtractedIndices] = useState([]);
+  const [importingExtracted, setImportingExtracted] = useState(false);
 
   const [formData, setFormData] = useState({
     companyName: '',
@@ -37,6 +57,7 @@ export const ContactsDirectory = () => {
 
   const [bulkText, setBulkText] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+
 
   const fetchContacts = async () => {
     try {
@@ -181,6 +202,105 @@ export const ContactsDirectory = () => {
     });
   };
 
+  const handleExtractorFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setExtractorFile(e.target.files[0]);
+      setExtractorError('');
+      setExtractedList([]);
+    }
+  };
+
+  const handleRunExtraction = async () => {
+    if (!extractorFile) {
+      setExtractorError('Please select a PDF or CSV file first.');
+      return;
+    }
+
+    setExtracting(true);
+    setExtractorError('');
+
+    const uploadForm = new FormData();
+    uploadForm.append('file', extractorFile);
+
+    try {
+      const res = await api.post('/contacts/ai-extract', uploadForm, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data.success && res.data.contacts?.length > 0) {
+        setExtractedList(res.data.contacts);
+        setSelectedExtractedIndices(res.data.contacts.map((_, idx) => idx));
+      } else {
+        setExtractorError('No valid contacts could be extracted from this file.');
+      }
+    } catch (err) {
+      setExtractorError(err.response?.data?.error?.message || 'Failed to extract contacts from file.');
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleToggleExtractedIndex = (idx) => {
+    if (selectedExtractedIndices.includes(idx)) {
+      setSelectedExtractedIndices(selectedExtractedIndices.filter((i) => i !== idx));
+    } else {
+      setSelectedExtractedIndices([...selectedExtractedIndices, idx]);
+    }
+  };
+
+  const handleToggleAllExtracted = () => {
+    if (selectedExtractedIndices.length === extractedList.length) {
+      setSelectedExtractedIndices([]);
+    } else {
+      setSelectedExtractedIndices(extractedList.map((_, idx) => idx));
+    }
+  };
+
+  const handleUpdateExtractedRow = (idx, field, val) => {
+    const updated = [...extractedList];
+    updated[idx] = { ...updated[idx], [field]: val };
+    setExtractedList(updated);
+  };
+
+  const handleDeleteExtractedRow = (idx) => {
+    const updated = extractedList.filter((_, i) => i !== idx);
+    setExtractedList(updated);
+    setSelectedExtractedIndices(
+      selectedExtractedIndices.filter((i) => i !== idx).map((i) => (i > idx ? i - 1 : i))
+    );
+  };
+
+  const handleImportExtractedContacts = async (launchOutreach = false) => {
+    const toImport = extractedList.filter((_, idx) => selectedExtractedIndices.includes(idx));
+    if (toImport.length === 0) {
+      alert('Please select at least one contact to import.');
+      return;
+    }
+
+    setImportingExtracted(true);
+    try {
+      const res = await api.post('/contacts/bulk', { contacts: toImport });
+      if (res.data.success) {
+        setShowExtractorModal(false);
+        setExtractorFile(null);
+        setExtractedList([]);
+        await fetchContacts();
+
+        if (launchOutreach) {
+          navigate('/send', {
+            state: {
+              prefillContacts: res.data.contacts,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to import contacts.');
+    } finally {
+      setImportingExtracted(false);
+    }
+  };
+
   return (
     <div className="space-y-5 pb-20">
       {/* Header */}
@@ -201,6 +321,18 @@ export const ContactsDirectory = () => {
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <button
+            onClick={() => {
+              setShowExtractorModal(true);
+              setExtractorFile(null);
+              setExtractedList([]);
+              setExtractorError('');
+            }}
+            className="neo-btn-primary text-xs font-bold flex-1 sm:flex-none justify-center bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 text-white shadow-md hover:shadow-indigo-500/25 border-0"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            Extract from PDF / CSV
+          </button>
+          <button
             onClick={() => setShowBulkModal(true)}
             className="neo-btn-secondary text-xs flex-1 sm:flex-none justify-center"
           >
@@ -209,7 +341,7 @@ export const ContactsDirectory = () => {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="neo-btn-primary text-xs font-bold flex-1 sm:flex-none justify-center"
+            className="neo-btn-secondary text-xs font-bold flex-1 sm:flex-none justify-center"
           >
             <Plus className="w-4 h-4" />
             Add Contact
@@ -506,7 +638,289 @@ export const ContactsDirectory = () => {
           </div>
         </div>
       )}
+
+      {/* AI PDF / CSV Extractor Modal */}
+      {showExtractorModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className={`neo-card p-5 sm:p-7 w-full bg-white/95 border border-slate-200/90 relative shadow-2xl transition-all my-auto ${
+            extractedList.length > 0 ? 'max-w-4xl' : 'max-w-xl'
+          }`}>
+            <button
+              onClick={() => {
+                setShowExtractorModal(false);
+                setExtractorFile(null);
+                setExtractedList([]);
+                setExtractorError('');
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {extractedList.length === 0 ? (
+              /* State 1: Upload File */
+              <div className="space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                    <Sparkles className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-extrabold text-slate-900">
+                      Extract Contacts from PDF / CSV
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Upload hiring lists, recruiter sheets, or PDF catalogs. AI automatically structures company names, emails, and roles.
+                    </p>
+                  </div>
+                </div>
+
+                {extractorError && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{extractorError}</span>
+                  </div>
+                )}
+
+                {/* Dropzone */}
+                <div className="relative border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-3xl p-6 sm:p-8 text-center bg-indigo-50/30 transition-all">
+                  <input
+                    type="file"
+                    accept=".pdf,.csv,.txt"
+                    onChange={handleExtractorFileChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+
+                  {extractorFile ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
+                        {extractorFile.name.endsWith('.pdf') ? (
+                          <FileText className="w-6 h-6" />
+                        ) : (
+                          <FileSpreadsheet className="w-6 h-6" />
+                        )}
+                      </div>
+                      <p className="text-sm font-black text-slate-800">{extractorFile.name}</p>
+                      <p className="text-xs text-slate-400 font-mono font-bold">
+                        {(extractorFile.size / 1024).toFixed(1)} KB
+                      </p>
+                      <span className="text-[11px] font-bold text-indigo-600 underline mt-1">
+                        Click or drop to replace file
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-sm">
+                        <UploadCloud className="w-6 h-6" />
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-800">
+                        Choose or drag & drop a PDF or CSV file
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Supports <span className="font-bold text-slate-700">.PDF</span>, <span className="font-bold text-slate-700">.CSV</span>, and <span className="font-bold text-slate-700">.TXT</span> (Max 25MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* API Key info banner */}
+                {!user?.emailConfig?.geminiApiKey && !user?.emailConfig?.openaiApiKey && (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl text-[11.5px] text-amber-900 font-medium flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Note:</strong> CSV files are parsed instantly for free. For <strong>PDF documents</strong>, please ensure you have added your free Gemini API key in{' '}
+                      <Link to="/settings" className="font-bold underline text-indigo-700">
+                        Settings
+                      </Link>.
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowExtractorModal(false)}
+                    className="neo-btn-secondary text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRunExtraction}
+                    disabled={!extractorFile || extracting}
+                    className="neo-btn-primary text-xs font-bold disabled:opacity-50 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0 shadow-md shadow-indigo-500/20"
+                  >
+                    {extracting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Extracting Contacts with AI...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        Extract Contacts
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* State 2: Preview & Edit Extracted Contacts */
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      Extracted Contacts ({extractedList.length})
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Verify or edit company details before importing. Uncheck rows you do not wish to save.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                      {selectedExtractedIndices.length} Selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleToggleAllExtracted}
+                      className="text-xs font-bold text-slate-600 hover:text-indigo-600 underline ml-1"
+                    >
+                      {selectedExtractedIndices.length === extractedList.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Extracted Table Container */}
+                <div className="max-h-[360px] overflow-y-auto border border-slate-200 rounded-2xl bg-white shadow-inner">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
+                      <tr>
+                        <th className="p-3 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedExtractedIndices.length === extractedList.length && extractedList.length > 0}
+                            onChange={handleToggleAllExtracted}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                        </th>
+                        <th className="p-3 w-12 text-slate-400">#</th>
+                        <th className="p-3">Company Name</th>
+                        <th className="p-3">Email Address</th>
+                        <th className="p-3">Recruiter / HR</th>
+                        <th className="p-3">Role / Purpose</th>
+                        <th className="p-3 w-10 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {extractedList.map((item, idx) => {
+                        const isSelected = selectedExtractedIndices.includes(idx);
+                        return (
+                          <tr
+                            key={idx}
+                            className={`hover:bg-slate-50/80 transition-colors ${
+                              isSelected ? 'bg-indigo-50/20' : 'opacity-60 bg-slate-50/40'
+                            }`}
+                          >
+                            <td className="p-2.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleExtractedIndex(idx)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px] text-slate-400">{idx + 1}</td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={item.companyName}
+                                onChange={(e) => handleUpdateExtractedRow(idx, 'companyName', e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-900 font-bold focus:border-indigo-500 focus:outline-none"
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="email"
+                                value={item.email}
+                                onChange={(e) => handleUpdateExtractedRow(idx, 'email', e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono text-indigo-700 font-bold focus:border-indigo-500 focus:outline-none"
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={item.contactName}
+                                onChange={(e) => handleUpdateExtractedRow(idx, 'contactName', e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none"
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={item.position}
+                                onChange={(e) => handleUpdateExtractedRow(idx, 'position', e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none"
+                              />
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteExtractedRow(idx)}
+                                title="Remove row"
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExtractedList([]);
+                      setExtractorFile(null);
+                    }}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 underline"
+                  >
+                    ← Upload Different File
+                  </button>
+
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleImportExtractedContacts(false)}
+                      disabled={importingExtracted || selectedExtractedIndices.length === 0}
+                      className="neo-btn-secondary text-xs font-bold disabled:opacity-50"
+                    >
+                      {importingExtracted ? 'Saving...' : `Import ${selectedExtractedIndices.length} Contacts`}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleImportExtractedContacts(true)}
+                      disabled={importingExtracted || selectedExtractedIndices.length === 0}
+                      className="neo-btn-primary text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0 shadow-md shadow-indigo-500/20"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Import & Launch Blast 🚀
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 

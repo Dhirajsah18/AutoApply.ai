@@ -11,6 +11,8 @@ import {
   HelpCircle,
   ShieldCheck,
   Server,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -19,6 +21,17 @@ export const ProfileSettings = () => {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const [showKeys, setShowKeys] = useState({
+    gemini: false,
+    openai: false,
+    smtp: false,
+    resend: false,
+  });
+
+  const toggleShowKey = (field) => {
+    setShowKeys((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -216,18 +229,28 @@ export const ProfileSettings = () => {
                   Get Free Key ↗
                 </a>
               </div>
-              <input
-                type="password"
-                placeholder="AIzaSy..."
-                value={formData.emailConfig.geminiApiKey || ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    emailConfig: { ...formData.emailConfig, geminiApiKey: e.target.value },
-                  })
-                }
-                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
-              />
+              <div className="relative">
+                <input
+                  type={showKeys.gemini ? 'text' : 'password'}
+                  placeholder="AIzaSy..."
+                  value={formData.emailConfig.geminiApiKey || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      emailConfig: { ...formData.emailConfig, geminiApiKey: e.target.value },
+                    })
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('gemini')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                  title={showKeys.gemini ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKeys.gemini ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
@@ -244,18 +267,28 @@ export const ProfileSettings = () => {
                   OpenAI Console ↗
                 </a>
               </div>
-              <input
-                type="password"
-                placeholder="sk-proj-..."
-                value={formData.emailConfig.openaiApiKey || ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    emailConfig: { ...formData.emailConfig, openaiApiKey: e.target.value },
-                  })
-                }
-                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
-              />
+              <div className="relative">
+                <input
+                  type={showKeys.openai ? 'text' : 'password'}
+                  placeholder="sk-proj-..."
+                  value={formData.emailConfig.openaiApiKey || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      emailConfig: { ...formData.emailConfig, openaiApiKey: e.target.value },
+                    })
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-slate-900 font-mono font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('openai')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                  title={showKeys.openai ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKeys.openai ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 font-medium leading-relaxed flex items-start gap-2">
@@ -373,18 +406,28 @@ export const ProfileSettings = () => {
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-700 mb-1 font-bold">SMTP / Gmail App Password</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.emailConfig.smtpPass}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        emailConfig: { ...formData.emailConfig, smtpPass: e.target.value },
-                      })
-                    }
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showKeys.smtp ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={formData.emailConfig.smtpPass}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          emailConfig: { ...formData.emailConfig, smtpPass: e.target.value },
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => toggleShowKey('smtp')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                      title={showKeys.smtp ? 'Hide password' : 'Show password'}
+                    >
+                      {showKeys.smtp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -393,18 +436,28 @@ export const ProfileSettings = () => {
           {formData.emailConfig.provider === 'resend' && (
             <div className="bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80 space-y-2">
               <label className="block text-xs text-slate-700 font-bold">Resend API Key</label>
-              <input
-                type="password"
-                placeholder="re_123456789"
-                value={formData.emailConfig.resendApiKey}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    emailConfig: { ...formData.emailConfig, resendApiKey: e.target.value },
-                  })
-                }
-                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type={showKeys.resend ? 'text' : 'password'}
+                  placeholder="re_123456789"
+                  value={formData.emailConfig.resendApiKey}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      emailConfig: { ...formData.emailConfig, resendApiKey: e.target.value },
+                    })
+                  }
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('resend')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                  title={showKeys.resend ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKeys.resend ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           )}
         </div>

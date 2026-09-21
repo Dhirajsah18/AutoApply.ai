@@ -28,7 +28,17 @@ import {
   Send,
   RotateCcw,
   FilePlus2,
+  Check,
+  Copy,
+  AlertCircle,
+  X,
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  Target,
+  Edit3,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -196,12 +206,115 @@ export const ResumeBuilder = () => {
   const [successToast, setSuccessToast] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState('Autosaved');
   const [zoomScale, setZoomScale] = useState(1);
+  const [mobileTab, setMobileTab] = useState('edit'); // 'edit' | 'preview'
+  const [autoFit, setAutoFit] = useState(true);
+  const [previewWidth, setPreviewWidth] = useState(800);
   const previewScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (!previewScrollRef.current) return;
+    const updateWidth = () => {
+      if (previewScrollRef.current) {
+        setPreviewWidth(previewScrollRef.current.clientWidth);
+      }
+    };
+    updateWidth();
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setPreviewWidth(entry.contentRect.width);
+        }
+      }
+    });
+    observer.observe(previewScrollRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const fitScale = Math.min(1, Math.max(0.35, (previewWidth - 36) / 800));
+  const effectiveScale = autoFit ? Number((fitScale * zoomScale).toFixed(2)) : zoomScale;
 
   const [title, setTitle] = useState('Full Stack Engineer Resume');
   const [versionTag, setVersionTag] = useState('Full Stack');
   const [isDefault, setIsDefault] = useState(false);
   const [builderData, setBuilderData] = useState(() => getInitialResumeData(user));
+
+  // AI ATS Audit State
+  const [showAtsModal, setShowAtsModal] = useState(false);
+  const [atsTargetRole, setAtsTargetRole] = useState('');
+  const [atsJobDesc, setAtsJobDesc] = useState('');
+  const [showJobDescInput, setShowJobDescInput] = useState(false);
+  const [atsLoading, setAtsLoading] = useState(false);
+  const [atsError, setAtsError] = useState('');
+  const [atsResult, setAtsResult] = useState(null);
+  const [atsActiveTab, setAtsActiveTab] = useState('overview'); // 'overview' | 'summary' | 'bullets'
+  const [copiedBulletIdx, setCopiedBulletIdx] = useState(null);
+  const [addedKeywords, setAddedKeywords] = useState([]);
+
+  const handleOpenAtsModal = () => {
+    setShowAtsModal(true);
+    setAtsError('');
+    if (!atsTargetRole) {
+      setAtsTargetRole(versionTag || title || 'Software Engineer');
+    }
+  };
+
+  const handleRunAtsCheck = async () => {
+    setAtsLoading(true);
+    setAtsError('');
+    try {
+      const userKey = user?.emailConfig?.geminiApiKey || user?.emailConfig?.openaiApiKey || '';
+      const res = await api.post('/ai/ats-check', {
+        resumeData: builderData,
+        targetRole: atsTargetRole.trim() || 'Software Engineer',
+        jobDescription: atsJobDesc.trim(),
+        apiKey: userKey,
+      });
+      if (res.data.success) {
+        setAtsResult(res.data);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to analyze resume ATS.';
+      setAtsError(msg);
+    } finally {
+      setAtsLoading(false);
+    }
+  };
+
+  const handleApplyImprovedSummary = () => {
+    if (!atsResult?.improvedSummary) return;
+    setBuilderData((prev) => ({
+      ...prev,
+      summary: atsResult.improvedSummary,
+    }));
+    try {
+      confetti({ particleCount: 60, spread: 55, origin: { y: 0.5 } });
+    } catch (e) {}
+    setSuccessToast('AI Enhanced Summary applied to your resume!');
+    setTimeout(() => setSuccessToast(''), 4000);
+  };
+
+  const handleAddMissingKeyword = (keyword) => {
+    if (!keyword) return;
+    setBuilderData((prev) => {
+      const existingTools = prev.skillsCategories?.tools || '';
+      const updatedTools = existingTools ? `${existingTools}, ${keyword}` : keyword;
+      return {
+        ...prev,
+        skillsCategories: {
+          ...prev.skillsCategories,
+          tools: updatedTools,
+        },
+      };
+    });
+    setAddedKeywords((prev) => [...prev, keyword]);
+  };
+
+  const handleCopyBullet = (text, idx) => {
+    navigator.clipboard.writeText(text);
+    setCopiedBulletIdx(idx);
+    setTimeout(() => setCopiedBulletIdx(null), 2500);
+  };
+
 
   // Initial Data & Draft Loading
   useEffect(() => {
@@ -424,9 +537,9 @@ export const ResumeBuilder = () => {
   const sc = builderData.skillsCategories || {};
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-3 lg:space-y-4 pb-20 lg:pb-0 lg:flex-1 lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <Link
             to="/resumes"
@@ -448,12 +561,12 @@ export const ResumeBuilder = () => {
         </div>
 
         {/* Action Buttons: Start Fresh, Download PDF, Save Resume */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           <button
             type="button"
             onClick={handleStartFresh}
             title="Clear all fields and start a fresh new resume"
-            className="neo-btn-secondary text-xs font-semibold py-2 px-3.5 flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+            className="neo-btn-secondary text-xs font-semibold py-2 px-3 flex items-center gap-1.5 text-slate-600 hover:text-slate-900 flex-1 sm:flex-none justify-center"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
             <span>Start Fresh</span>
@@ -461,19 +574,29 @@ export const ResumeBuilder = () => {
 
           <button
             type="button"
+            onClick={handleOpenAtsModal}
+            className="neo-btn-ai text-xs font-bold py-2.5 px-3.5 shadow-md shadow-indigo-500/20 flex items-center gap-1.5 flex-1 sm:flex-none justify-center"
+            title="Analyze ATS Score, fix critical gaps, and auto-optimize summary with AI"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>AI ATS Check</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleDownloadPdf}
             disabled={downloading || saving}
-            className="neo-btn-secondary text-xs font-bold py-2.5 px-4 shadow-sm text-indigo-700 bg-indigo-50/80 border-indigo-200 hover:bg-indigo-100 flex items-center gap-1.5"
+            className="neo-btn-secondary text-xs font-bold py-2.5 px-3.5 shadow-sm text-indigo-700 bg-indigo-50/80 border-indigo-200 hover:bg-indigo-100 flex items-center gap-1.5 flex-1 sm:flex-none justify-center"
           >
             <Download className="w-4 h-4 text-indigo-600" />
-            {downloading ? 'Generating PDF...' : 'Download PDF'}
+            {downloading ? 'PDF...' : 'Download PDF'}
           </button>
 
           <button
             type="button"
             onClick={handleSave}
             disabled={saving || downloading}
-            className="neo-btn-primary text-xs font-extrabold py-2.5 px-5 shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center gap-1.5"
+            className="neo-btn-primary text-xs font-extrabold py-2.5 px-4 shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center gap-1.5 flex-1 sm:flex-none justify-center"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save & Add Resume'}
@@ -481,9 +604,37 @@ export const ResumeBuilder = () => {
         </div>
       </div>
 
+      {/* Mobile Segmented Tab Bar: 1. Edit Details vs 2. Live Preview (Visible on screens < 1024px) */}
+      <div className="lg:hidden shrink-0 flex items-center p-1 bg-slate-200/90 rounded-2xl border border-slate-300/70 shadow-inner">
+        <button
+          type="button"
+          onClick={() => setMobileTab('edit')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
+            mobileTab === 'edit'
+              ? 'bg-white text-indigo-700 shadow-md shadow-slate-900/5'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Edit3 className="w-4 h-4 text-indigo-600" />
+          <span>Edit Resume</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
+            mobileTab === 'preview'
+              ? 'bg-white text-indigo-700 shadow-md shadow-slate-900/5'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Eye className="w-4 h-4 text-indigo-600" />
+          <span>Live Preview</span>
+        </button>
+      </div>
+
       {/* Success Notification Banner */}
       {successToast && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in">
+        <div className="shrink-0 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successToast}</span>
@@ -499,10 +650,10 @@ export const ResumeBuilder = () => {
         </div>
       )}
 
-      {/* Main Split Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Input Form Controls (6 cols) */}
-        <div className="lg:col-span-6 space-y-5">
+      {/* Main Split Layout: Left Form (Scrollable) + Right Preview (Stationary) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
+        {/* LEFT COLUMN: Input Form Controls (Scrollable independently) */}
+        <div className={`lg:col-span-6 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-2.5 pb-12 scrollbar-thin [webkit-overflow-scrolling:touch] ${mobileTab === 'edit' ? 'block' : 'hidden lg:block'}`}>
           {/* 1. Metadata Settings Card */}
           <div className="neo-card p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
@@ -1008,21 +1159,29 @@ export const ResumeBuilder = () => {
           </div>
 
           {/* Bottom Action Bar for Easy Access */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 pt-2">
             <button
               type="button"
               onClick={handleSave}
               disabled={saving || downloading}
-              className="neo-btn-primary flex-1 py-3 text-xs font-extrabold shadow-lg shadow-indigo-500/25 justify-center"
+              className="neo-btn-primary flex-1 py-3 text-xs font-extrabold shadow-lg shadow-indigo-500/25 justify-center min-w-[140px]"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save & Add Resume'}
             </button>
             <button
               type="button"
+              onClick={() => setMobileTab('preview')}
+              className="lg:hidden neo-btn-ai py-3 px-4 text-xs font-bold justify-center flex items-center gap-1.5"
+            >
+              <Eye className="w-4 h-4" />
+              Preview Resume
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadPdf}
               disabled={downloading || saving}
-              className="neo-btn-secondary py-3 px-5 text-xs font-bold justify-center"
+              className="neo-btn-secondary py-3 px-4 text-xs font-bold justify-center"
             >
               <Download className="w-4 h-4 text-indigo-600" />
               Download PDF
@@ -1030,33 +1189,60 @@ export const ResumeBuilder = () => {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Live Resume Preview (6 cols) with Independent Smooth Scroll */}
-        <div className="lg:col-span-6 lg:sticky lg:top-4 h-[750px] lg:h-[calc(100vh-6.5rem)] flex flex-col min-h-0">
-          <div className="neo-card p-3 sm:p-4 border border-slate-200/90 shadow-xl flex flex-col h-full bg-white/95 overflow-hidden">
+        {/* RIGHT COLUMN: Live Resume Preview (Stationary, locked on screen) */}
+        <div className={`lg:col-span-6 lg:h-full flex flex-col min-h-0 ${mobileTab === 'preview' ? 'block' : 'hidden lg:block'}`}>
+          <div className="neo-card p-3 sm:p-4 border border-slate-200/90 shadow-xl flex flex-col min-h-[560px] lg:min-h-0 lg:h-full bg-white/95 overflow-hidden">
             {/* Preview Toolbar */}
             <div className="flex items-center justify-between px-2 pb-2.5 text-xs font-bold text-slate-600 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1.5 text-indigo-700 font-extrabold">
                   <Eye className="w-4 h-4" /> Live View
                 </span>
+                {/* Mobile Back to Edit shortcut */}
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('edit')}
+                  className="lg:hidden text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 transition-colors"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Edit Form
+                </button>
               </div>
 
               {/* Zoom and Quick Actions */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                {/* Fit vs 100% toggle */}
                 <button
                   type="button"
-                  onClick={() => setZoomScale((prev) => Math.max(0.75, prev - 0.1))}
+                  onClick={() => {
+                    setAutoFit(!autoFit);
+                    setZoomScale(1);
+                  }}
+                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors"
+                >
+                  {autoFit ? 'Fit Width' : '100%'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutoFit(false);
+                    setZoomScale((prev) => Math.max(0.4, Number((prev - 0.1).toFixed(1))));
+                  }}
                   className="p-1 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                   title="Zoom Out"
                 >
                   <ZoomOut className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-[10px] text-slate-500 font-mono w-9 text-center">
-                  {Math.round(zoomScale * 100)}%
+                <span className="text-[10px] text-slate-500 font-mono w-10 text-center">
+                  {Math.round(effectiveScale * 100)}%
                 </span>
                 <button
                   type="button"
-                  onClick={() => setZoomScale((prev) => Math.min(1.25, prev + 0.1))}
+                  onClick={() => {
+                    setAutoFit(false);
+                    setZoomScale((prev) => Math.min(1.4, Number((prev + 0.1).toFixed(1))));
+                  }}
                   className="p-1 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                   title="Zoom In"
                 >
@@ -1065,61 +1251,48 @@ export const ResumeBuilder = () => {
               </div>
             </div>
 
-            {/* Scrollable Document Container with smooth scroll */}
+            {/* Stationary Document Container with smooth scroll for inner paper */}
             <div
               ref={previewScrollRef}
-              className="flex-1 overflow-y-auto mt-2.5 rounded-2xl bg-slate-200/70 p-3 sm:p-5 overscroll-contain shadow-inner scrollbar-thin"
+              className="flex-1 overflow-auto mt-2.5 rounded-2xl bg-slate-200/70 p-2 sm:p-4 shadow-inner scrollbar-thin [webkit-overflow-scrolling:touch]"
               style={{ scrollBehavior: 'smooth' }}
             >
               {/* Paper Sheet Representation scaled with zoom */}
               <div
-                className="bg-white text-black rounded-sm p-6 sm:p-8 shadow-md border border-slate-300 min-h-[950px] font-serif select-text text-[11px] leading-snug mx-auto origin-top transition-transform duration-150"
+                className="bg-white text-black rounded-sm p-4 sm:p-8 shadow-md border border-slate-300 min-h-[950px] font-serif select-text text-[11px] leading-snug mx-auto origin-top transition-transform duration-150"
                 style={{
-                  transform: `scale(${zoomScale})`,
-                  maxWidth: '800px',
+                  transform: `scale(${effectiveScale})`,
+                  width: '800px',
+                  marginBottom: effectiveScale < 0.98 ? `-${Math.round((1 - effectiveScale) * 1020)}px` : '0px',
                 }}
               >
                 {/* 1. Header: Name & Contact Row */}
-                <div className="text-center mb-3">
-                  <h1 className="text-2xl font-bold font-serif text-black tracking-wide">
+                <div className="text-center mb-3.5">
+                  <h1 className="text-2xl sm:text-[26px] font-bold font-serif text-black tracking-wide">
                     {formatCapitalize(p.fullName || 'Dhiraj Kumar Sah')}
                   </h1>
 
-                  {/* Contact links bar with icons */}
-                  <div className="text-[10px] text-black font-serif mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                  {/* Contact links bar with properly aligned icons */}
+                  <div className="text-[11.5px] text-black font-serif mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
                     {p.phone && (
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-black shrink-0" />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-black shrink-0" />
                         <span>{p.phone}</span>
                       </span>
                     )}
 
                     {p.email && (
-                      <span className="inline-flex items-center gap-1">
-                        <Mail className="w-3 h-3 text-black shrink-0" />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-black shrink-0" />
                         <a href={`mailto:${p.email}`} className="underline underline-offset-2 hover:text-cyan-800 transition-colors">
                           {p.email}
                         </a>
                       </span>
                     )}
 
-                    {p.github && (
-                      <span className="inline-flex items-center gap-1">
-                        <GithubIcon className="w-3 h-3 text-black shrink-0" />
-                        <a
-                          href={p.github.startsWith('http') ? p.github : `https://${p.github}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
-                        >
-                          GitHub
-                        </a>
-                      </span>
-                    )}
-
                     {p.linkedin && (
-                      <span className="inline-flex items-center gap-1">
-                        <LinkedinIcon className="w-3 h-3 text-black shrink-0" />
+                      <span className="inline-flex items-center gap-1.5">
+                        <LinkedinIcon className="w-3.5 h-3.5 text-black shrink-0" />
                         <a
                           href={p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`}
                           target="_blank"
@@ -1131,9 +1304,23 @@ export const ResumeBuilder = () => {
                       </span>
                     )}
 
+                    {p.github && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <GithubIcon className="w-3.5 h-3.5 text-black shrink-0" />
+                        <a
+                          href={p.github.startsWith('http') ? p.github : `https://${p.github}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
+                        >
+                          GitHub
+                        </a>
+                      </span>
+                    )}
+
                     {p.portfolio && (
-                      <span className="inline-flex items-center gap-1">
-                        <Globe className="w-3 h-3 text-black shrink-0" />
+                      <span className="inline-flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-black shrink-0" />
                         <a
                           href={p.portfolio.startsWith('http') ? p.portfolio : `https://${p.portfolio}`}
                           target="_blank"
@@ -1149,11 +1336,11 @@ export const ResumeBuilder = () => {
 
                 {/* 2. Summary */}
                 {builderData.summary && (
-                  <div className="mb-3">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                  <div className="mb-3.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Summary
                     </h2>
-                    <p className="text-black text-[10.5px] leading-snug text-justify">
+                    <p className="text-black text-[11px] leading-relaxed text-justify">
                       {builderData.summary}
                     </p>
                   </div>
@@ -1161,13 +1348,13 @@ export const ResumeBuilder = () => {
 
                 {/* 3. Education */}
                 {builderData.education?.length > 0 && (
-                  <div className="mb-3">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                  <div className="mb-3.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Education
                     </h2>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {builderData.education.map((edu, idx) => (
-                        <div key={idx} className="text-[10.5px]">
+                        <div key={idx} className="text-[11px]">
                           <div className="flex justify-between items-baseline font-serif">
                             <span className="font-bold text-black">{edu.institution || 'University Name'}</span>
                             <span className="text-black">{edu.dates || edu.graduationYear}</span>
@@ -1184,13 +1371,13 @@ export const ResumeBuilder = () => {
 
                 {/* 4. Experience */}
                 {builderData.experience?.length > 0 && (
-                  <div className="mb-3">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                  <div className="mb-3.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Experience
                     </h2>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {builderData.experience.map((exp, idx) => (
-                        <div key={idx} className="text-[10.5px]">
+                        <div key={idx} className="text-[11px]">
                           <div className="flex justify-between items-baseline font-serif">
                             <span className="font-bold text-black">{exp.company || 'Company'}</span>
                             <span className="text-black">{exp.dates || `${exp.startDate || ''} – ${exp.endDate || ''}`}</span>
@@ -1200,11 +1387,11 @@ export const ResumeBuilder = () => {
                             <span>{exp.location}</span>
                           </div>
                           {exp.bullets?.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 text-[10.5px] text-black font-serif">
+                            <ul className="mt-1 space-y-1 text-[11px] text-black font-serif">
                               {exp.bullets.filter(Boolean).map((b, i) => (
                                 <li key={i} className="flex items-start">
                                   <span className="mr-1.5 shrink-0">–</span>
-                                  <span className="leading-snug text-justify">{b}</span>
+                                  <span className="leading-relaxed text-justify">{b}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1217,15 +1404,15 @@ export const ResumeBuilder = () => {
 
                 {/* 5. Projects with Live Link & GitHub Clickable Icons */}
                 {builderData.projects?.length > 0 && (
-                  <div className="mb-3">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                  <div className="mb-3.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Projects
                     </h2>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {builderData.projects.map((proj, idx) => (
-                        <div key={idx} className="text-[10.5px]">
+                        <div key={idx} className="text-[11px]">
                           <div className="flex justify-between items-baseline font-serif">
-                            <div className="flex items-center flex-wrap gap-1">
+                            <div className="flex items-center flex-wrap gap-1.5">
                               <span className="font-bold text-black">{proj.name || 'Project Name'}</span>
                               
                               {/* Clickable Live Project Icon */}
@@ -1235,9 +1422,9 @@ export const ResumeBuilder = () => {
                                   target="_blank"
                                   rel="noreferrer"
                                   title="Live Demo"
-                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors mx-0.5 cursor-pointer"
+                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors cursor-pointer"
                                 >
-                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <ExternalLink className="w-3.5 h-3.5 inline-block align-middle" />
                                 </a>
                               )}
 
@@ -1248,15 +1435,15 @@ export const ResumeBuilder = () => {
                                   target="_blank"
                                   rel="noreferrer"
                                   title="GitHub Code"
-                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors mx-0.5 cursor-pointer"
+                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors cursor-pointer"
                                 >
-                                  <GithubIcon className="w-3.5 h-3.5" />
+                                  <GithubIcon className="w-3.5 h-3.5 inline-block align-middle" />
                                 </a>
                               )}
 
                               {(proj.technologies || (proj.techStack?.length > 0)) && (
-                                <span className="italic text-black text-[10.5px]">
-                                  {' '}| {proj.technologies || proj.techStack.join(', ')}
+                                <span className="italic text-black text-[11px] ml-1">
+                                  | {proj.technologies || proj.techStack.join(', ')}
                                 </span>
                               )}
                             </div>
@@ -1264,11 +1451,11 @@ export const ResumeBuilder = () => {
                           </div>
 
                           {proj.bullets?.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 text-[10.5px] text-black font-serif">
+                            <ul className="mt-1 space-y-1 text-[11px] text-black font-serif">
                               {proj.bullets.filter(Boolean).map((b, i) => (
                                 <li key={i} className="flex items-start">
                                   <span className="mr-1.5 shrink-0">–</span>
-                                  <span className="leading-snug text-justify">{b}</span>
+                                  <span className="leading-relaxed text-justify">{b}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1280,11 +1467,11 @@ export const ResumeBuilder = () => {
                 )}
 
                 {/* 6. Skills */}
-                <div className="mb-3">
-                  <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                <div className="mb-3.5">
+                  <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                     Skills
                   </h2>
-                  <div className="space-y-0.5 text-[10.5px] text-black font-serif">
+                  <div className="space-y-1 text-[11px] text-black font-serif leading-relaxed">
                     {sc.languages && (
                       <p>
                         <strong className="font-bold">Languages:</strong> {sc.languages}
@@ -1315,11 +1502,11 @@ export const ResumeBuilder = () => {
 
                 {/* 7. Relevant Coursework */}
                 {builderData.coursework?.length > 0 && (
-                  <div className="mb-3">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                  <div className="mb-3.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Relevant Coursework
                     </h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-0.5 gap-x-2 text-[10px] text-black font-serif">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-1 gap-x-2.5 text-[10.5px] text-black font-serif">
                       {builderData.coursework.map((course, idx) => (
                         <div key={idx} className="flex items-center gap-1.5">
                           <span>•</span>
@@ -1333,10 +1520,10 @@ export const ResumeBuilder = () => {
                 {/* 8. Certifications */}
                 {builderData.certifications?.length > 0 && (
                   <div className="mb-2">
-                    <h2 className="text-[12.5px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5">
+                    <h2 className="text-[13px] font-bold font-serif text-black border-b border-black pb-0.5 mb-1.5 tracking-wide">
                       Certifications
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-0.5 gap-x-2 text-[10px] text-black font-serif">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-2.5 text-[10.5px] text-black font-serif">
                       {builderData.certifications.map((cert, idx) => (
                         <div key={idx} className="flex items-center gap-1.5">
                           <span>•</span>
@@ -1348,9 +1535,402 @@ export const ResumeBuilder = () => {
                 )}
               </div>
             </div>
+
+            {/* Mobile Bottom Action Dock in Preview Mode */}
+            <div className="lg:hidden flex items-center gap-2 pt-3 border-t border-slate-200 mt-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileTab('edit')}
+                className="neo-btn-secondary py-2.5 px-3 text-xs font-bold flex items-center gap-1.5 text-slate-600"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Form</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || downloading}
+                className="neo-btn-primary flex-1 py-2.5 text-xs font-bold shadow-md shadow-indigo-500/25 justify-center"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{saving ? 'Saving...' : 'Save Resume'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloading || saving}
+                className="neo-btn-secondary py-2.5 px-3 text-xs font-bold justify-center"
+              >
+                <Download className="w-3.5 h-3.5 text-indigo-600" />
+                <span>PDF</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* AI ATS Resume Checker & Optimizer Modal */}
+      {showAtsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="neo-card p-4 sm:p-7 w-full max-w-3xl bg-white border border-slate-200/90 relative shadow-2xl transition-all my-auto max-h-[92vh] flex flex-col">
+            <button
+              onClick={() => setShowAtsModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors z-10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-start gap-3 mb-5 pr-8 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                <Sparkles className="w-5 h-5 text-indigo-100" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  AI ATS Resume Auditor & Optimizer
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Evaluate ATS pass rate, uncover missing keywords, and enhance your resume for recruiter screens.
+                </p>
+              </div>
+            </div>
+
+            {/* Target Role & Controls Form */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 mb-4 space-y-3 shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Target Role / Job Title
+                  </label>
+                  <input
+                    type="text"
+                    value={atsTargetRole}
+                    onChange={(e) => setAtsTargetRole(e.target.value)}
+                    placeholder="e.g. Full Stack Developer, Backend Engineer, SDE-1"
+                    className="neo-input text-xs font-semibold"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRunAtsCheck}
+                  disabled={atsLoading}
+                  className="neo-btn-primary text-xs font-bold py-2.5 px-5 flex items-center justify-center gap-2 shadow-md shadow-indigo-500/25 shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  {atsLoading ? 'Analyzing ATS Algorithms...' : atsResult ? 'Re-Analyze Resume' : 'Scan ATS Score'}
+                </button>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowJobDescInput(!showJobDescInput)}
+                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                >
+                  {showJobDescInput ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  {showJobDescInput ? 'Hide Job Description' : '+ Compare Against Specific Job Description (Optional)'}
+                </button>
+
+                {showJobDescInput && (
+                  <div className="mt-2 animate-in fade-in">
+                    <textarea
+                      rows={3}
+                      value={atsJobDesc}
+                      onChange={(e) => setAtsJobDesc(e.target.value)}
+                      placeholder="Paste target job description or requirements from LinkedIn, Indeed, etc. to get targeted keyword matching..."
+                      className="neo-input font-mono text-xs leading-relaxed"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {atsError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2 shrink-0">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{atsError}</span>
+              </div>
+            )}
+
+            {/* Results Section */}
+            {atsResult && (
+              <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+                {/* Score Banner Bento */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="neo-card p-4 bg-gradient-to-br from-indigo-50/50 to-purple-50/30 border border-indigo-100 flex items-center gap-3.5">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner ${
+                      atsResult.atsScore >= 80
+                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                        : atsResult.atsScore >= 65
+                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                        : 'bg-rose-100 text-rose-700 border border-rose-300'
+                    }`}>
+                      {atsResult.atsScore}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overall ATS Score</span>
+                      <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                        {atsResult.rating || (atsResult.atsScore >= 80 ? 'Strong Match' : 'Needs Work')}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-medium">Out of 100 benchmark</p>
+                    </div>
+                  </div>
+
+                  <div className="neo-card p-4 border border-slate-200 flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-black text-base shadow-sm">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Role Relevance</span>
+                      <h4 className="text-sm font-extrabold text-slate-900">{atsResult.roleMatchPercentage || 85}% Match</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">{atsTargetRole || 'Software Engineering'}</p>
+                    </div>
+                  </div>
+
+                  <div className="neo-card p-4 border border-slate-200 flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600 font-black text-base shadow-sm">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audited By</span>
+                      <h4 className="text-sm font-extrabold text-slate-900 capitalize">{atsResult.provider === 'openai' ? 'OpenAI' : 'Google Gemini AI'}</h4>
+                      <p className="text-[10px] text-emerald-600 font-bold">✓ Industry Standard Rules</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-Tabs */}
+                <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setAtsActiveTab('overview')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg transition-all ${
+                      atsActiveTab === 'overview'
+                        ? 'bg-white text-slate-900 shadow-sm font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Overview & Keywords
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAtsActiveTab('summary')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg transition-all ${
+                      atsActiveTab === 'summary'
+                        ? 'bg-white text-slate-900 shadow-sm font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    AI Summary Optimizer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAtsActiveTab('bullets')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg transition-all ${
+                      atsActiveTab === 'bullets'
+                        ? 'bg-white text-slate-900 shadow-sm font-bold'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    STAR Bullet Improver
+                  </button>
+                </div>
+
+                {/* TAB 1: OVERVIEW & KEYWORDS */}
+                {atsActiveTab === 'overview' && (
+                  <div className="space-y-4 animate-in fade-in">
+                    {/* Strengths & Gaps 2-Col */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="neo-card p-4 border border-emerald-200/80 bg-emerald-50/20 space-y-2">
+                        <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          ATS Strengths Found ({atsResult.strengths?.length || 0})
+                        </h4>
+                        <ul className="space-y-1.5 text-xs text-slate-700">
+                          {atsResult.strengths?.map((s, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-emerald-500 font-bold shrink-0 mt-0.5">•</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="neo-card p-4 border border-amber-200/80 bg-amber-50/20 space-y-2">
+                        <h4 className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                          Critical ATS Gaps to Fix ({atsResult.criticalGaps?.length || 0})
+                        </h4>
+                        <ul className="space-y-1.5 text-xs text-slate-700">
+                          {atsResult.criticalGaps?.map((g, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-amber-500 font-bold shrink-0 mt-0.5">•</span>
+                              <span>{g}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Missing Keywords Tag Cloud */}
+                    {atsResult.missingKeywords?.length > 0 && (
+                      <div className="neo-card p-4 border border-slate-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-extrabold text-slate-900">
+                            Missing Keywords ({atsResult.missingKeywords.length})
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            Click any keyword to add to your Developer Tools
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {atsResult.missingKeywords.map((kw, idx) => {
+                            const isAdded = addedKeywords.includes(kw);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleAddMissingKeyword(kw)}
+                                disabled={isAdded}
+                                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold flex items-center gap-1.5 transition-all ${
+                                  isAdded
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 cursor-default'
+                                    : 'bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border-slate-200 hover:border-indigo-300 shadow-sm'
+                                }`}
+                              >
+                                {isAdded ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>{kw} (Added)</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{kw}</span>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Tips */}
+                    {atsResult.quickTips?.length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs font-medium space-y-1">
+                        <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">Pro Recruiter Tip:</span>
+                        {atsResult.quickTips.map((tip, idx) => (
+                          <p key={idx}>💡 {tip}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: AI SUMMARY OPTIMIZER */}
+                {atsActiveTab === 'summary' && (
+                  <div className="space-y-4 animate-in fade-in">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Summary</span>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed font-mono">
+                        {builderData.summary || 'No summary currently added.'}
+                      </div>
+                    </div>
+
+                    {atsResult.improvedSummary && (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                            AI ATS-Optimized Summary
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleApplyImprovedSummary}
+                            className="neo-btn-primary text-xs font-bold py-1.5 px-3.5 flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Apply to Resume
+                          </button>
+                        </div>
+                        <div className="p-4 rounded-xl bg-indigo-50/50 border-2 border-indigo-200 text-xs text-slate-800 leading-relaxed font-medium shadow-sm">
+                          {atsResult.improvedSummary}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: STAR BULLETS OPTIMIZER */}
+                {atsActiveTab === 'bullets' && (
+                  <div className="space-y-3.5 animate-in fade-in">
+                    <p className="text-xs text-slate-500 font-medium">
+                      ATS algorithms prioritize bullet points formatted with the <span className="font-bold text-slate-700">STAR method</span> (Situation, Task, Action, Result) with verifiable numbers.
+                    </p>
+
+                    {atsResult.bulletImprovements?.map((item, idx) => (
+                      <div key={idx} className="neo-card p-4 border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">
+                            Section: {item.section || 'Experience'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyBullet(item.improved, idx)}
+                            className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                          >
+                            {copiedBulletIdx === idx ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="text-emerald-600 font-bold">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy Improved</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block">Before (Passive / Weak):</span>
+                          <p className="text-xs text-slate-500 bg-rose-50/60 p-2.5 rounded-lg border border-rose-100 font-mono">
+                            {item.original}
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">After (STAR Method & Quantifiable):</span>
+                          <p className="text-xs text-slate-800 bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-200 font-medium">
+                            {item.improved}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-2.5 pt-4 mt-4 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAtsModal(false)}
+                className="neo-btn-secondary text-xs font-semibold py-2 px-4"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

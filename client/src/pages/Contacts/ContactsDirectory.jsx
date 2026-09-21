@@ -9,6 +9,7 @@ import {
   Trash2,
   Send,
   FileSpreadsheet,
+  Download,
   X,
   MapPin,
   Briefcase,
@@ -33,7 +34,6 @@ export const ContactsDirectory = () => {
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showBulkModal, setShowBulkModal] = useState(false);
 
   // AI / File Extractor state
   const [showExtractorModal, setShowExtractorModal] = useState(false);
@@ -55,8 +55,16 @@ export const ContactsDirectory = () => {
     tags: 'Frontend, React',
   });
 
-  const [bulkText, setBulkText] = useState('');
-  const [bulkSaving, setBulkSaving] = useState(false);
+  // Native CSV Import (No AI needed)
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvParsedContacts, setCsvParsedContacts] = useState([]);
+  const [csvMode, setCsvMode] = useState('upload'); // 'upload' | 'paste'
+  const [csvRawText, setCsvRawText] = useState('');
+  const [csvError, setCsvError] = useState('');
+  const [csvSaving, setCsvSaving] = useState(false);
+
 
 
   const fetchContacts = async () => {
@@ -103,58 +111,245 @@ export const ContactsDirectory = () => {
     }
   };
 
-  const handleBulkSubmit = async (e) => {
-    e.preventDefault();
-    if (!bulkText.trim()) return;
+  // Robust Client-Side CSV Parser (No AI Required - Instant & 100% Free)
+  const parseCSVText = (text) => {
+    if (!text || typeof text !== 'string') return [];
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return [];
 
-    setBulkSaving(true);
-    try {
-      const lines = bulkText.trim().split('\n');
-      const parsedContacts = [];
-
-      lines.forEach((line) => {
-        const parts = line.split(',').map((p) => p.trim());
-        if (parts.length >= 2) {
-          let companyName = parts[0];
-          let contactName = 'Hiring Manager';
-          let email = '';
-          let position = 'Software Engineer';
-
-          if (parts.length === 2) {
-            email = parts[1];
-          } else if (parts.length === 3) {
-            contactName = parts[1];
-            email = parts[2];
-          } else if (parts.length >= 4) {
-            contactName = parts[1];
-            email = parts[2];
-            position = parts[3];
+    const parseLine = (line) => {
+      const cells = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
           }
+        } else if ((char === ',' || char === '\t') && !inQuotes) {
+          cells.push(cur.trim());
+          cur = '';
+        } else {
+          cur += char;
+        }
+      }
+      cells.push(cur.trim());
+      return cells;
+    };
 
-          if (email.includes('@')) {
-            parsedContacts.push({ companyName, contactName, email, position });
-          }
+    const rows = lines.map(parseLine);
+    if (rows.length === 0) return [];
+
+    // Header Detection
+    const header = rows[0].map((c) => c.toLowerCase());
+    const hasHeader = header.some((c) =>
+      ['company', 'email', 'mail', 'position', 'role', 'title', 'recruiter', 'hr', 'designation'].some((kw) =>
+        c.includes(kw)
+      )
+    );
+
+    let colCompany = -1;
+    let colEmail = -1;
+    let colPosition = -1;
+    let colName = -1;
+
+    let dataRows = rows;
+
+    if (hasHeader) {
+      header.forEach((c, idx) => {
+        if (colCompany === -1 && (c.includes('company') || c.includes('org') || c.includes('firm'))) {
+          colCompany = idx;
+        } else if (colEmail === -1 && (c.includes('email') || c.includes('mail'))) {
+          colEmail = idx;
+        } else if (
+          colPosition === -1 &&
+          (c.includes('position') || c.includes('role') || c.includes('title') || c.includes('job') || c.includes('designation'))
+        ) {
+          colPosition = idx;
+        } else if (
+          colName === -1 &&
+          (c.includes('name') || c.includes('recruiter') || c.includes('hr'))
+        ) {
+          colName = idx;
         }
       });
+      dataRows = rows.slice(1);
+    }
 
-      if (parsedContacts.length === 0) {
-        alert('Please format lines as: Company, HR Name, Email, Position');
-        setBulkSaving(false);
-        return;
+    const contacts = [];
+    dataRows.forEach((cells) => {
+      if (cells.length === 0 || cells.every((c) => !c)) return;
+
+      let company = '';
+      let email = '';
+      let position = 'Software Engineer';
+      let name = 'Hiring Manager';
+
+      if (hasHeader) {
+        if (colCompany !== -1 && cells[colCompany]) company = cells[colCompany];
+        if (colEmail !== -1 && cells[colEmail]) email = cells[colEmail];
+        if (colPosition !== -1 && cells[colPosition]) position = cells[colPosition];
+        if (colName !== -1 && cells[colName]) name = cells[colName];
+      } else {
+        const emailIdx = cells.findIndex((c) => c.includes('@'));
+        if (emailIdx !== -1) {
+          email = cells[emailIdx];
+          if (emailIdx === 0) {
+            company = cells[1] || 'Target Company';
+            if (cells[2]) position = cells[2];
+          } else if (emailIdx === 1) {
+            company = cells[0];
+            if (cells[2]) position = cells[2];
+            if (cells[3]) name = cells[3];
+          } else if (emailIdx === 2) {
+            company = cells[0];
+            name = cells[1];
+            if (cells[3]) position = cells[3];
+          } else {
+            company = cells[0] || 'Target Company';
+            if (cells[emailIdx + 1]) position = cells[emailIdx + 1];
+          }
+        } else {
+          company = cells[0] || '';
+          email = cells[1] || '';
+          position = cells[2] || 'Software Engineer';
+        }
       }
 
-      const res = await api.post('/contacts/bulk', { contacts: parsedContacts });
+      company = company.replace(/^["']|["']$/g, '').trim();
+      email = email.replace(/^["']|["']$/g, '').trim();
+      position = position.replace(/^["']|["']$/g, '').trim();
+      name = name.replace(/^["']|["']$/g, '').trim();
+
+      if (company && email && email.includes('@')) {
+        contacts.push({
+          companyName: company,
+          email: email,
+          position: position || 'Software Engineer',
+          contactName: name || 'Hiring Manager',
+        });
+      }
+    });
+
+    // Deduplicate by company + email
+    const unique = [];
+    const seen = new Set();
+    contacts.forEach((c) => {
+      const key = `${c.companyName.toLowerCase()}::${c.email.toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(c);
+      }
+    });
+
+    return unique;
+  };
+
+  const handleDownloadSampleCSV = () => {
+    const csvContent = "Company Name,HR Email,Position,HR Name\nGoogle,recruiting@google.com,Software Engineer,Sundar Pichai\nMicrosoft,hr@microsoft.com,Full Stack Developer,Satya Nadella\nAmazon,talent@amazon.com,Frontend Engineer,Andy Jassy\nStripe,jobs@stripe.com,Backend Engineer,Patrick Collison";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'sample_contacts.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCsvFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const MAX_SIZE = 2 * 1024 * 1024; // 2MB limit
+    if (file.size > MAX_SIZE) {
+      setCsvError('File size exceeds the 2MB limit. Please upload a file under 2MB.');
+      setCsvFile(null);
+      setCsvFileName('');
+      setCsvParsedContacts([]);
+      e.target.value = '';
+      return;
+    }
+
+    setCsvFile(file);
+    setCsvFileName(file.name);
+    setCsvError('');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result;
+        if (!text) {
+          setCsvError('Selected file is empty.');
+          setCsvParsedContacts([]);
+          return;
+        }
+        const parsed = parseCSVText(text);
+        if (parsed.length === 0) {
+          setCsvError('No valid contacts found. Please check columns: Company Name, HR Email, Position.');
+          setCsvParsedContacts([]);
+        } else {
+          setCsvParsedContacts(parsed);
+          setCsvError('');
+        }
+      } catch (err) {
+        setCsvError('Failed to parse CSV file.');
+        setCsvParsedContacts([]);
+      }
+    };
+    reader.onerror = () => {
+      setCsvError('Failed to read file.');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvPasteChange = (text) => {
+    setCsvRawText(text);
+    if (!text.trim()) {
+      setCsvParsedContacts([]);
+      setCsvError('');
+      return;
+    }
+    const parsed = parseCSVText(text);
+    if (parsed.length > 0) {
+      setCsvParsedContacts(parsed);
+      setCsvError('');
+    } else {
+      setCsvParsedContacts([]);
+      setCsvError('No valid contacts detected yet. Make sure Company Name and HR Email are provided.');
+    }
+  };
+
+  const handleRemoveParsedRow = (index) => {
+    setCsvParsedContacts((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleImportParsedContacts = async () => {
+    if (csvParsedContacts.length === 0) return;
+    setCsvSaving(true);
+    setCsvError('');
+    try {
+      const res = await api.post('/contacts/bulk', { contacts: csvParsedContacts });
       if (res.data.success) {
-        setShowBulkModal(false);
-        setBulkText('');
+        setShowCsvModal(false);
+        setCsvParsedContacts([]);
+        setCsvFile(null);
+        setCsvFileName('');
+        setCsvRawText('');
         fetchContacts();
       }
     } catch (err) {
-      alert('Failed to import contacts');
+      setCsvError(err.response?.data?.error?.message || 'Failed to save contacts. Please try again.');
     } finally {
-      setBulkSaving(false);
+      setCsvSaving(false);
     }
   };
+
 
   const handleDelete = async (id) => {
     if (window.confirm('Delete this HR contact?')) {
@@ -185,6 +380,25 @@ export const ContactsDirectory = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    const confirmMsg = count === contacts.length
+      ? `Are you sure you want to delete ALL ${count} contacts from your directory? This cannot be undone.`
+      : `Are you sure you want to delete ${count} selected contacts?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const res = await api.post('/contacts/bulk-delete', { ids: selectedIds });
+      if (res.data.success) {
+        setSelectedIds([]);
+        fetchContacts();
+      }
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to delete selected contacts');
+    }
+  };
+
   const handleLaunchBatch = () => {
     const selectedContacts = contacts.filter((c) => selectedIds.includes(c._id));
     navigate('/send', {
@@ -204,7 +418,16 @@ export const ContactsDirectory = () => {
 
   const handleExtractorFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setExtractorFile(e.target.files[0]);
+      const file = e.target.files[0];
+      const MAX_SIZE = 2 * 1024 * 1024; // 2MB limit
+      if (file.size > MAX_SIZE) {
+        setExtractorError('File size exceeds the 2MB limit. Please upload a file under 2MB.');
+        setExtractorFile(null);
+        setExtractedList([]);
+        e.target.value = '';
+        return;
+      }
+      setExtractorFile(file);
       setExtractorError('');
       setExtractedList([]);
     }
@@ -216,16 +439,35 @@ export const ContactsDirectory = () => {
       return;
     }
 
+    if (extractorFile.size > 2 * 1024 * 1024) {
+      setExtractorError('File size exceeds the 2MB limit. Please select a file under 2MB.');
+      return;
+    }
+
     setExtracting(true);
     setExtractorError('');
 
     const uploadForm = new FormData();
     uploadForm.append('file', extractorFile);
 
+    let token = localStorage.getItem('job_auto_token') || sessionStorage.getItem('job_auto_token');
+    if (token && (token === 'null' || token === 'undefined')) {
+      token = null;
+    }
+    if (token) {
+      token = token.replace(/^"(.*)"$/, '$1').trim();
+      uploadForm.append('token', token);
+    }
+
+    const headers = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+      headers['x-auth-token'] = token;
+    }
+
     try {
-      const res = await api.post('/contacts/ai-extract', uploadForm, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const url = `/contacts/ai-extract${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      const res = await api.post(url, uploadForm, { headers });
 
       if (res.data.success && res.data.contacts?.length > 0) {
         setExtractedList(res.data.contacts);
@@ -234,6 +476,10 @@ export const ContactsDirectory = () => {
         setExtractorError('No valid contacts could be extracted from this file.');
       }
     } catch (err) {
+      if (err.response?.status === 401 || err.response?.data?.error?.code === 'UNAUTHORIZED') {
+        setExtractorError('Authentication required. Please refresh or log in again.');
+        return;
+      }
       const rawMsg = err.response?.data?.error?.message || err.message || 'Failed to extract contacts.';
       let cleanMsg = typeof rawMsg === 'string' ? rawMsg : JSON.stringify(rawMsg);
       if (cleanMsg.includes('API key not valid') || cleanMsg.includes('API_KEY_INVALID')) {
@@ -334,17 +580,24 @@ export const ContactsDirectory = () => {
               setExtractedList([]);
               setExtractorError('');
             }}
-            className="neo-btn-primary text-xs font-bold flex-1 sm:flex-none justify-center bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 text-white shadow-md hover:shadow-indigo-500/25 border-0"
+            className="neo-btn-ai text-xs font-bold flex-1 sm:flex-none justify-center"
           >
-            <Sparkles className="w-4 h-4 text-amber-300" />
+            <Sparkles className="w-4 h-4 text-indigo-100" />
             Extract from PDF / CSV
           </button>
           <button
-            onClick={() => setShowBulkModal(true)}
-            className="neo-btn-secondary text-xs flex-1 sm:flex-none justify-center"
+            onClick={() => {
+              setShowCsvModal(true);
+              setCsvParsedContacts([]);
+              setCsvFile(null);
+              setCsvFileName('');
+              setCsvRawText('');
+              setCsvError('');
+            }}
+            className="neo-btn-secondary text-xs font-semibold flex-1 sm:flex-none justify-center"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Import List
+            Import CSV
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -369,7 +622,7 @@ export const ContactsDirectory = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
           <select
             value={selectedTag}
             onChange={(e) => setSelectedTag(e.target.value)}
@@ -384,29 +637,56 @@ export const ContactsDirectory = () => {
           </select>
 
           {contacts.length > 0 && (
-            <button
-              onClick={handleSelectAll}
-              className="neo-btn-secondary text-xs !py-2.5 px-3.5 font-bold whitespace-nowrap shrink-0"
-            >
-              {selectedIds.length === contacts.length ? 'Deselect All' : 'Select All'}
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="neo-btn-secondary text-xs !py-2.5 px-3.5 font-bold whitespace-nowrap shrink-0 flex-1 sm:flex-none justify-center"
+              >
+                {selectedIds.length === contacts.length ? 'Deselect All' : 'Select All'}
+              </button>
+
+              {selectedIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100/80 border border-rose-200 transition-colors shadow-sm whitespace-nowrap shrink-0 flex-1 sm:flex-none justify-center"
+                  title="Delete selected contacts"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete {selectedIds.length === contacts.length ? 'All' : `Selected (${selectedIds.length})`}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Floating Batch Outreach Bar */}
+      {/* Floating Batch Outreach & Delete Bar */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-xl text-white px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl sm:rounded-full shadow-2xl flex flex-col xs:flex-row items-center justify-between gap-3 sm:gap-4 border border-slate-700 w-[92%] sm:w-auto max-w-md animate-in fade-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-xl text-white px-4 sm:px-6 py-3 sm:py-3.5 rounded-2xl sm:rounded-full shadow-2xl flex flex-col xs:flex-row items-center justify-between gap-3 sm:gap-4 border border-slate-700 w-[92%] sm:w-auto max-w-lg animate-in fade-in slide-in-from-bottom-5">
           <span className="text-xs font-bold text-indigo-300 whitespace-nowrap">
             ✓ {selectedIds.length} Selected
           </span>
-          <button
-            onClick={handleLaunchBatch}
-            className="neo-btn-primary w-full xs:w-auto text-xs py-2 px-5 font-black shadow-lg shadow-indigo-500/40 justify-center"
-          >
-            <Send className="w-3.5 h-3.5" />
-            Send Emails ({selectedIds.length})
-          </button>
+          <div className="flex items-center gap-2 w-full xs:w-auto justify-end">
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl sm:rounded-full text-xs font-bold text-rose-300 bg-rose-950/80 hover:bg-rose-900/90 border border-rose-800/80 transition-colors justify-center whitespace-nowrap shadow-sm"
+              title="Delete selected contacts"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              Delete {selectedIds.length === contacts.length ? 'All' : `(${selectedIds.length})`}
+            </button>
+            <button
+              type="button"
+              onClick={handleLaunchBatch}
+              className="neo-btn-primary w-full xs:w-auto text-xs py-2 px-5 font-black shadow-lg shadow-indigo-500/40 justify-center whitespace-nowrap"
+            >
+              <Send className="w-3.5 h-3.5" />
+              Send Emails ({selectedIds.length})
+            </button>
+          </div>
         </div>
       )}
 
@@ -600,48 +880,231 @@ export const ContactsDirectory = () => {
         </div>
       )}
 
-      {/* Bulk Modal */}
-      {showBulkModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="neo-card p-6 max-w-lg w-full bg-white/95 border border-slate-200/90 relative shadow-2xl">
+      {/* Clean & Modern CSV Importer Modal */}
+      {showCsvModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className={`neo-card p-6 sm:p-7 w-full bg-white border border-slate-200/90 relative shadow-2xl transition-all my-auto ${
+            csvParsedContacts.length > 0 ? 'max-w-3xl' : 'max-w-xl'
+          }`}>
             <button
-              onClick={() => setShowBulkModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100"
+              onClick={() => {
+                setShowCsvModal(false);
+                setCsvParsedContacts([]);
+                setCsvFile(null);
+                setCsvFileName('');
+                setCsvRawText('');
+                setCsvError('');
+              }}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
-            <h2 className="text-base font-extrabold text-slate-900 mb-1">Import Contacts</h2>
-            <p className="text-xs text-slate-500 mb-3 font-medium">
-              Format: <code className="text-indigo-600 font-bold">Company, Recruiter Name, Email, Job Title</code>
-            </p>
 
-            <form onSubmit={handleBulkSubmit} className="space-y-3.5">
-              <textarea
-                rows={6}
-                required
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={`Google, Sundar Team, hr@google.com, Full Stack Engineer\nStripe, Alice Recruiter, recruiting@stripe.com, Frontend Engineer`}
-                className="neo-input font-mono text-xs leading-relaxed"
-              />
-
-              <div className="flex justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowBulkModal(false)}
-                  className="neo-btn-secondary text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={bulkSaving}
-                  className="neo-btn-primary text-xs font-bold disabled:opacity-50"
-                >
-                  {bulkSaving ? 'Importing...' : 'Import List'}
-                </button>
+            {/* Clean Modal Header */}
+            <div className="flex items-start justify-between gap-3 mb-5 pr-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 shadow-sm shrink-0">
+                  <FileSpreadsheet className="w-5 h-5 text-slate-700" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Import Contacts from CSV
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Columns: <span className="font-semibold text-slate-700">Company Name</span>, <span className="font-semibold text-slate-700">HR Email</span>, <span className="font-semibold text-slate-700">Position</span>
+                  </p>
+                </div>
               </div>
-            </form>
+
+              <button
+                type="button"
+                onClick={handleDownloadSampleCSV}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shrink-0"
+                title="Download ready-to-fill sample CSV template"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                Sample Template
+              </button>
+            </div>
+
+            {/* Mobile Template Link */}
+            <div className="sm:hidden mb-3">
+              <button
+                type="button"
+                onClick={handleDownloadSampleCSV}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:underline"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download Sample Template (.csv)
+              </button>
+            </div>
+
+            {/* Minimal Segmented Tabs */}
+            <div className="flex bg-slate-100/90 p-1 rounded-xl mb-4 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => { setCsvMode('upload'); setCsvError(''); }}
+                className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  csvMode === 'upload'
+                    ? 'bg-white text-slate-900 shadow-sm font-bold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                Upload CSV File
+              </button>
+              <button
+                type="button"
+                onClick={() => { setCsvMode('paste'); setCsvError(''); }}
+                className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  csvMode === 'paste'
+                    ? 'bg-white text-slate-900 shadow-sm font-bold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Paste Rows
+              </button>
+            </div>
+
+            {/* Upload Zone */}
+            {csvMode === 'upload' && (
+              <div>
+                <label className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl p-7 flex flex-col items-center justify-center gap-2 bg-slate-50/50 hover:bg-indigo-50/20 cursor-pointer transition-all group">
+                  <input
+                    type="file"
+                    accept=".csv, text/csv"
+                    onChange={handleCsvFileUpload}
+                    className="hidden"
+                  />
+                  <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-indigo-600 shadow-sm transition-colors">
+                    <UploadCloud className="w-5 h-5" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-semibold text-slate-800">
+                      {csvFileName ? (
+                        <span className="text-indigo-600 font-bold">{csvFileName}</span>
+                      ) : (
+                        <>Click to upload <span className="text-slate-400 font-normal">or drag & drop</span></>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Standard CSV file with headers • Max: 2MB
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Paste Mode */}
+            {csvMode === 'paste' && (
+              <div className="space-y-1.5">
+                <textarea
+                  rows={5}
+                  value={csvRawText}
+                  onChange={(e) => handleCsvPasteChange(e.target.value)}
+                  placeholder={`Company Name, HR Email, Position, HR Name\nGoogle, recruiting@google.com, Software Engineer, Sundar Pichai\nMicrosoft, careers@microsoft.com, Frontend Developer, Satya Nadella`}
+                  className="neo-input font-mono text-xs leading-relaxed"
+                />
+              </div>
+            )}
+
+            {/* Error Message */}
+            {csvError && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center gap-2 text-rose-700 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{csvError}</span>
+              </div>
+            )}
+
+            {/* Parsed Contacts Preview */}
+            {csvParsedContacts.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800">Contacts Preview</span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      {csvParsedContacts.length} valid
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCsvParsedContacts([]);
+                      setCsvFileName('');
+                      setCsvRawText('');
+                    }}
+                    className="text-[11px] font-medium text-slate-400 hover:text-rose-600 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 shadow-inner bg-slate-50/40">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold sticky top-0 border-b border-slate-200 text-[11px]">
+                      <tr>
+                        <th className="p-2.5 pl-3">Company</th>
+                        <th className="p-2.5">HR Email</th>
+                        <th className="p-2.5">Position</th>
+                        <th className="p-2.5">Name</th>
+                        <th className="p-2.5 pr-3 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {csvParsedContacts.map((contact, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-2.5 pl-3 font-medium text-slate-900">{contact.companyName}</td>
+                          <td className="p-2.5 text-slate-600 font-mono text-[11px]">{contact.email}</td>
+                          <td className="p-2.5 text-slate-700">{contact.position}</td>
+                          <td className="p-2.5 text-slate-500">{contact.contactName}</td>
+                          <td className="p-2.5 pr-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveParsedRow(idx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors"
+                              title="Remove row"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2.5 pt-4 mt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCsvModal(false);
+                  setCsvParsedContacts([]);
+                  setCsvFile(null);
+                  setCsvFileName('');
+                  setCsvRawText('');
+                  setCsvError('');
+                }}
+                className="neo-btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportParsedContacts}
+                disabled={csvSaving || csvParsedContacts.length === 0}
+                className="neo-btn-primary text-xs font-bold disabled:opacity-50"
+              >
+                {csvSaving
+                  ? 'Importing...'
+                  : csvParsedContacts.length > 0
+                  ? `Import ${csvParsedContacts.length} Contacts`
+                  : 'Import Contacts'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -669,7 +1132,7 @@ export const ContactsDirectory = () => {
               <div className="space-y-5">
                 <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
                   <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <Sparkles className="w-4 h-4 text-indigo-100" />
                   </div>
                   <div>
                     <h2 className="text-sm font-extrabold text-slate-900">
@@ -720,7 +1183,7 @@ export const ContactsDirectory = () => {
                         Upload or drop PDF / CSV file
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        PDF or CSV (Max 25MB)
+                        PDF or CSV (Max 2MB)
                       </p>
                     </div>
                   )}
@@ -738,7 +1201,7 @@ export const ContactsDirectory = () => {
                     type="button"
                     onClick={handleRunExtraction}
                     disabled={!extractorFile || extracting}
-                    className="neo-btn-primary text-xs font-bold disabled:opacity-50 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0 shadow-md shadow-indigo-500/20"
+                    className="neo-btn-ai text-xs font-bold disabled:opacity-50 flex items-center gap-2"
                   >
                     {extracting ? (
                       <>
@@ -747,7 +1210,7 @@ export const ContactsDirectory = () => {
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-100" />
                         Extract Contacts
                       </>
                     )}
@@ -895,7 +1358,7 @@ export const ContactsDirectory = () => {
                       type="button"
                       onClick={() => handleImportExtractedContacts(true)}
                       disabled={importingExtracted || selectedExtractedIndices.length === 0}
-                      className="neo-btn-primary text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0 shadow-md shadow-indigo-500/20"
+                      className="neo-btn-ai text-xs font-bold disabled:opacity-50 flex items-center gap-1.5"
                     >
                       <Send className="w-3.5 h-3.5" />
                       Import & Launch Blast 🚀

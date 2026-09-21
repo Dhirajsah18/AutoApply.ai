@@ -33,3 +33,10 @@ export const ENV = {
   // Storage
   STORAGE_DIR: path.resolve(__dirname, '../../uploads'),
 };
+
+if (ENV.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('job_automation_key_2026')) {
+    console.warn('⚠️ [SECURITY WARNING]: You are running in PRODUCTION with a default or insecure JWT_SECRET. Please set a strong, random JWT_SECRET in your .env file!');
+  }
+}
+

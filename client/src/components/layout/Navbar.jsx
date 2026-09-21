@@ -9,26 +9,32 @@ export const Navbar = ({ onMenuToggle = () => {} }) => {
   const navigate = useNavigate();
 
   const getPageInfo = () => {
-    switch (location.pathname) {
-      case '/dashboard':
-        return { category: 'App', title: 'Dashboard' };
-      case '/send':
-        return { category: 'App', title: 'Send Emails' };
-      case '/applications':
-        return { category: 'App', title: 'Applications' };
-      case '/resumes':
-        return { category: 'App', title: 'Resumes' };
-      case '/resumes/builder':
-        return { category: 'App', title: 'Resume Builder' };
-      case '/contacts':
-        return { category: 'App', title: 'HR Contacts' };
-      case '/templates':
-        return { category: 'App', title: 'Templates' };
-      case '/settings':
-        return { category: 'App', title: 'Settings' };
-      default:
-        return { category: 'App', title: 'Dashboard' };
+    const path = location.pathname;
+    if (path.startsWith('/resumes/builder')) {
+      return { category: 'App', title: 'Resume Builder' };
     }
+    if (path.startsWith('/resumes')) {
+      return { category: 'App', title: 'Resumes' };
+    }
+    if (path.startsWith('/dashboard')) {
+      return { category: 'App', title: 'Dashboard' };
+    }
+    if (path.startsWith('/send')) {
+      return { category: 'App', title: 'Send Emails' };
+    }
+    if (path.startsWith('/applications')) {
+      return { category: 'App', title: 'Applications' };
+    }
+    if (path.startsWith('/contacts')) {
+      return { category: 'App', title: 'HR Contacts' };
+    }
+    if (path.startsWith('/templates')) {
+      return { category: 'App', title: 'Templates' };
+    }
+    if (path.startsWith('/settings')) {
+      return { category: 'App', title: 'Settings' };
+    }
+    return { category: 'App', title: 'Dashboard' };
   };
 
   const pageInfo = getPageInfo();

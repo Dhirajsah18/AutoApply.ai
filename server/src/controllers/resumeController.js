@@ -93,6 +93,13 @@ export const createOrUpdateBuilderResume = async (req, res, next) => {
 
     // Generate PDF for this builder resume
     try {
+      if (resume.filePath && fs.existsSync(resume.filePath)) {
+        try {
+          fs.unlinkSync(resume.filePath);
+        } catch (e) {
+          console.warn('Could not remove old builder PDF:', e.message);
+        }
+      }
       const pdfResult = await generateResumePdf(resume);
       resume.filePath = pdfResult.filePath;
       resume.originalFileName = `${resume.title.replace(/\s+/g, '_')}.pdf`;
@@ -218,8 +225,11 @@ export const downloadResumeFile = async (req, res, next) => {
     }
 
     const validPath = await resolveResumeFilePath(resume);
-    if (!validPath || !fs.existsSync(validPath)) {
-      return res.status(404).json({ success: false, error: { message: 'Resume file not found on server' } });
+    const safeUploadsDir = path.resolve(__dirname, '../../uploads');
+    const resolvedPath = validPath ? path.resolve(validPath) : null;
+
+    if (!resolvedPath || !fs.existsSync(resolvedPath) || !resolvedPath.startsWith(safeUploadsDir)) {
+      return res.status(404).json({ success: false, error: { message: 'Resume file not found or inaccessible.' } });
     }
 
     const filename = resume.originalFileName || `${(resume.title || 'Resume').replace(/\s+/g, '_')}.pdf`;

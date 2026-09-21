@@ -42,7 +42,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
       {/* Sidebar Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 h-screen shrink-0 bg-white/95 lg:bg-white/75 backdrop-blur-2xl border-r border-slate-200/80 flex flex-col justify-between select-none overflow-hidden shadow-2xl lg:shadow-[4px_0_24px_rgba(15,23,42,0.03)] transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 h-screen h-[100dvh] shrink-0 bg-white/95 lg:bg-white/75 backdrop-blur-2xl border-r border-slate-200/80 flex flex-col justify-between select-none overflow-hidden shadow-2xl lg:shadow-[4px_0_24px_rgba(15,23,42,0.03)] transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:static lg:translate-x-0`}
       >

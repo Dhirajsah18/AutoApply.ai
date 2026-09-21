@@ -16,10 +16,32 @@ const api = axios.create({
 // Request interceptor to attach JWT
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('job_auto_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    let token = localStorage.getItem('job_auto_token') || sessionStorage.getItem('job_auto_token');
+    if (token && (token === 'null' || token === 'undefined')) {
+      token = null;
     }
+
+    if (token) {
+      const cleanToken = token.replace(/^"(.*)"$/, '$1').trim();
+      if (config.headers?.set) {
+        config.headers.set('Authorization', `Bearer ${cleanToken}`);
+        config.headers.set('x-auth-token', cleanToken);
+      } else {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${cleanToken}`;
+        config.headers['x-auth-token'] = cleanToken;
+      }
+    }
+
+    // Allow browser/axios to set proper multipart boundary when sending FormData
+    if (config.data instanceof FormData) {
+      if (config.headers?.delete) {
+        config.headers.delete('Content-Type');
+      } else if (config.headers) {
+        delete config.headers['Content-Type'];
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

@@ -6,7 +6,8 @@ export const connectDB = async () => {
     const conn = await mongoose.connect(ENV.MONGODB_URI);
     console.log(`[MongoDB] Connected: ${conn.connection.host}`);
   } catch (error) {
+    const maskedUri = (ENV.MONGODB_URI || '').replace(/:\/\/([^:]+):([^@]+)@/, '://$1:****@');
     console.error(`[MongoDB] Connection error:`, error.message);
-    console.warn(`[MongoDB] App will run in degraded/mock mode if MongoDB is not reachable locally. Ensure MongoDB is running on ${ENV.MONGODB_URI}`);
+    console.warn(`[MongoDB] App will run in degraded mode if MongoDB is not reachable. Target URI: ${maskedUri}`);
   }
 };

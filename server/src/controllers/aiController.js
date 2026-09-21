@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
-import { generateJobEmail } from '../services/aiService.js';
+import { generateJobEmail, analyzeResumeAts } from '../services/aiService.js';
 import { Resume } from '../models/Resume.js';
 import { User } from '../models/User.js';
+
 
 export const generateEmail = async (req, res, next) => {
   try {
@@ -97,3 +98,34 @@ export const personalizeTemplate = async (req, res, next) => {
     next(err);
   }
 };
+
+export const checkResumeAts = async (req, res, next) => {
+  try {
+    const { resumeData, targetRole, jobDescription, apiKey } = req.body;
+
+    if (!resumeData) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Resume data is required to run ATS audit.' },
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    const result = await analyzeResumeAts({
+      user,
+      resumeData,
+      targetRole,
+      jobDescription,
+      apiKey,
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

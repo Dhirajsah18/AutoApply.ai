@@ -180,7 +180,7 @@ export const ApplicationTracker = () => {
         <div className="text-center py-20 text-slate-500 text-sm">Loading applications...</div>
       ) : applications.length > 0 ? (
         <div className="neo-card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto [webkit-overflow-scrolling:touch]">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100/90 text-slate-600 uppercase tracking-wider border-b border-slate-200/80 font-bold">
                 <tr>

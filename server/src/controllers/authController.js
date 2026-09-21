@@ -8,12 +8,23 @@ const generateToken = (id) => {
 
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, title, skills } = req.body;
+    let { name, email, password, title, skills } = req.body;
 
-    if (!name || !email || !password) {
+    // Strict type check to prevent NoSQL operator injection
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({
         success: false,
-        error: { code: 'MISSING_FIELDS', message: 'Name, email, and password are required.' },
+        error: { code: 'INVALID_INPUT', message: 'Name, email, and password must be valid text.' },
+      });
+    }
+
+    name = name.trim();
+    email = email.trim().toLowerCase();
+
+    if (!name || !email || !password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_FIELDS', message: 'Name, email, and password (min 6 characters) are required.' },
       });
     }
 
@@ -30,7 +41,7 @@ export const register = async (req, res, next) => {
       email,
       password,
       title: title || 'Full Stack Developer',
-      skills: Array.isArray(skills) ? skills : (skills ? skills.split(',').map(s => s.trim()) : ['JavaScript', 'React', 'Node.js', 'MongoDB']),
+      skills: Array.isArray(skills) ? skills : (skills ? String(skills).split(',').map(s => s.trim()) : ['JavaScript', 'React', 'Node.js', 'MongoDB']),
     });
 
     const token = generateToken(user._id);
@@ -45,7 +56,7 @@ export const register = async (req, res, next) => {
         title: user.title,
         skills: user.skills,
         links: user.links,
-        emailConfig: user.emailConfig,
+        emailConfig: user.getDecryptedEmailConfig ? user.getDecryptedEmailConfig() : user.emailConfig,
       },
     });
   } catch (err) {
@@ -55,7 +66,17 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+
+    // Strict type check to prevent NoSQL operator injection
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'Email and password must be valid text strings.' },
+      });
+    }
+
+    email = email.trim().toLowerCase();
 
     if (!email || !password) {
       return res.status(400).json({
@@ -84,7 +105,7 @@ export const login = async (req, res, next) => {
         title: user.title,
         skills: user.skills,
         links: user.links,
-        emailConfig: user.emailConfig,
+        emailConfig: user.getDecryptedEmailConfig ? user.getDecryptedEmailConfig() : user.emailConfig,
       },
     });
   } catch (err) {
@@ -95,9 +116,16 @@ export const login = async (req, res, next) => {
 export const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: 'User not found' } });
+    }
+
+    const userObj = user.toObject();
+    userObj.emailConfig = user.getDecryptedEmailConfig ? user.getDecryptedEmailConfig() : user.emailConfig;
+
     res.json({
       success: true,
-      user,
+      user: userObj,
     });
   } catch (err) {
     next(err);
@@ -109,11 +137,15 @@ export const updateProfile = async (req, res, next) => {
     const { name, title, skills, links, emailConfig } = req.body;
     const user = await User.findById(req.user._id);
 
-    if (name) user.name = name;
-    if (title) user.title = title;
-    if (skills) user.skills = Array.isArray(skills) ? skills : skills.split(',').map(s => s.trim());
-    if (links) user.links = { ...user.links, ...links };
-    if (emailConfig) user.emailConfig = { ...user.emailConfig, ...emailConfig };
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: 'User not found' } });
+    }
+
+    if (name && typeof name === 'string') user.name = name.trim();
+    if (title && typeof title === 'string') user.title = title.trim();
+    if (skills) user.skills = Array.isArray(skills) ? skills : String(skills).split(',').map(s => s.trim());
+    if (links && typeof links === 'object') user.links = { ...user.links, ...links };
+    if (emailConfig && typeof emailConfig === 'object') user.emailConfig = { ...user.emailConfig, ...emailConfig };
 
     await user.save();
 
@@ -126,7 +158,7 @@ export const updateProfile = async (req, res, next) => {
         title: user.title,
         skills: user.skills,
         links: user.links,
-        emailConfig: user.emailConfig,
+        emailConfig: user.getDecryptedEmailConfig ? user.getDecryptedEmailConfig() : user.emailConfig,
       },
     });
   } catch (err) {

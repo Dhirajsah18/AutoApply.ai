@@ -231,9 +231,9 @@ export const ProfileSettings = () => {
             <label className="block text-xs font-bold text-slate-700 mb-2">Preferred AI Engine</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
-                { id: 'auto', name: '⚡ Auto Detect', desc: 'Uses whichever key is active' },
-                { id: 'openai', name: '🟢 OpenAI (GPT-4o)', desc: 'Prioritize OpenAI API key' },
-                { id: 'gemini', name: '🔵 Google Gemini', desc: 'Prioritize Gemini (Free) key' },
+                { id: 'auto', name: 'Auto Detect', desc: 'Uses whichever key is active' },
+                { id: 'openai', name: 'OpenAI', desc: 'Prioritize OpenAI API key' },
+                { id: 'gemini', name: 'Google Gemini', desc: 'Prioritize Gemini key' },
               ].map((prov) => {
                 const isSelected = (formData.emailConfig.aiProvider || 'auto') === prov.id;
                 return (

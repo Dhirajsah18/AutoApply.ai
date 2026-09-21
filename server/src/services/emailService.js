@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 import { ENV } from '../config/env.js';
+import { decryptSecret } from './cryptoService.js';
 
 export const sendJobApplicationEmail = async ({
   user,
@@ -47,7 +48,7 @@ export const sendJobApplicationEmail = async ({
   }
 
   // 2. RESEND API PROVIDER
-  const resendApiKey = user?.emailConfig?.resendApiKey || ENV.RESEND_API_KEY;
+  const resendApiKey = decryptSecret(user?.emailConfig?.resendApiKey) || ENV.RESEND_API_KEY;
   if (provider === 'resend' && resendApiKey) {
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -89,7 +90,7 @@ export const sendJobApplicationEmail = async ({
   const host = user?.emailConfig?.smtpHost || ENV.SMTP_HOST || 'smtp.gmail.com';
   const port = user?.emailConfig?.smtpPort || ENV.SMTP_PORT || 587;
   const userAuth = user?.emailConfig?.smtpUser || ENV.SMTP_USER;
-  const passAuth = user?.emailConfig?.smtpPass || ENV.SMTP_PASS;
+  const passAuth = decryptSecret(user?.emailConfig?.smtpPass) || ENV.SMTP_PASS;
   const secure = user?.emailConfig?.smtpSecure ?? (port === 465);
 
   if (!userAuth || !passAuth) {

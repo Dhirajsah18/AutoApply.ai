@@ -9,6 +9,11 @@
   color-scheme: light;
 }
 
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background-color: #f2e9e4;
   background-image: 
@@ -20,10 +25,12 @@ body {
   background-attachment: fixed;
   color: #1a1e24;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Custom Smooth Minimal Scrollbar */
@@ -120,10 +127,44 @@ body {
     transition: all 0.2s ease;
     white-space: nowrap;
   }
-  .neo-btn-primary:hover {
+  .neo-btn-primary:hover:not(:disabled) {
     background: linear-gradient(135deg, #058288 0%, #046e73 50%, #025357 100%);
     box-shadow: 0 6px 20px rgba(6, 150, 156, 0.45);
     transform: translateY(-1px);
+  }
+  .neo-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .neo-btn-ai {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.35rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    color: #FFFFFF;
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #7c3aed 100%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+  .neo-btn-ai:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4338ca 0%, #4f46e5 50%, #6d28d9 100%);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+    transform: translateY(-1px);
+  }
+  .neo-btn-ai:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 
   .neo-btn-secondary {

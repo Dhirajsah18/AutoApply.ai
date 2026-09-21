@@ -1,5 +1,6 @@
 import { CompanyContact } from '../models/CompanyContact.js';
 import { ENV } from '../config/env.js';
+import { decryptSecret } from '../services/cryptoService.js';
 import {
   parseCsvOrDelimited,
   aiExtractFromPdfGemini,
@@ -124,6 +125,32 @@ export const deleteContact = async (req, res, next) => {
   }
 };
 
+export const bulkDeleteContacts = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Please provide an array of contact IDs to delete.' },
+      });
+    }
+
+    const result = await CompanyContact.deleteMany({
+      _id: { $in: ids },
+      userId: req.user._id,
+    });
+
+    res.json({
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `Successfully deleted ${result.deletedCount} contacts.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 export const extractContactsFromFile = async (req, res, next) => {
   try {
     if (!req.file && !req.body?.text) {
@@ -135,8 +162,8 @@ export const extractContactsFromFile = async (req, res, next) => {
 
     const file = req.file;
     const user = req.user;
-    const geminiApiKey = user?.emailConfig?.geminiApiKey || ENV.GEMINI_API_KEY;
-    const openaiApiKey = user?.emailConfig?.openaiApiKey || ENV.OPENAI_API_KEY;
+    const geminiApiKey = decryptSecret(user?.emailConfig?.geminiApiKey) || ENV.GEMINI_API_KEY;
+    const openaiApiKey = decryptSecret(user?.emailConfig?.openaiApiKey) || ENV.OPENAI_API_KEY;
 
     let rawExtracted = [];
 

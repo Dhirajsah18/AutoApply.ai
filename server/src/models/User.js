@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { encryptSecret, decryptSecret } from '../services/cryptoService.js';
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -50,9 +51,28 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  // 1. Hash password if modified
+  if (this.isModified('password')) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
+
+  // 2. Encrypt sensitive credentials at rest using AES-256-GCM
+  if (this.emailConfig) {
+    if (this.isModified('emailConfig.smtpPass') && this.emailConfig.smtpPass) {
+      this.emailConfig.smtpPass = encryptSecret(this.emailConfig.smtpPass);
+    }
+    if (this.isModified('emailConfig.resendApiKey') && this.emailConfig.resendApiKey) {
+      this.emailConfig.resendApiKey = encryptSecret(this.emailConfig.resendApiKey);
+    }
+    if (this.isModified('emailConfig.geminiApiKey') && this.emailConfig.geminiApiKey) {
+      this.emailConfig.geminiApiKey = encryptSecret(this.emailConfig.geminiApiKey);
+    }
+    if (this.isModified('emailConfig.openaiApiKey') && this.emailConfig.openaiApiKey) {
+      this.emailConfig.openaiApiKey = encryptSecret(this.emailConfig.openaiApiKey);
+    }
+  }
+
   next();
 });
 
@@ -60,4 +80,16 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
+userSchema.methods.getDecryptedEmailConfig = function () {
+  const cfg = (this.emailConfig && this.emailConfig.toObject) ? this.emailConfig.toObject() : { ...(this.emailConfig || {}) };
+  return {
+    ...cfg,
+    smtpPass: decryptSecret(cfg.smtpPass),
+    resendApiKey: decryptSecret(cfg.resendApiKey),
+    geminiApiKey: decryptSecret(cfg.geminiApiKey),
+    openaiApiKey: decryptSecret(cfg.openaiApiKey),
+  };
+};
+
 export const User = mongoose.model('User', userSchema);
+

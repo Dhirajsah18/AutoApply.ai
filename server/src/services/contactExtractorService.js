@@ -100,12 +100,31 @@ export const extractPdfText = async (buffer) => {
   }
 };
 
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
+
+const generateWithGeminiFallback = async (genAI, contentPayload) => {
+  let lastErr = null;
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(contentPayload);
+      return result.response.text();
+    } catch (err) {
+      lastErr = err;
+      if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('no longer available')) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+};
+
 /**
  * Extracts contacts from PDF using Gemini Multimodal
  */
 export const aiExtractFromPdfGemini = async (buffer, apiKey) => {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
   const prompt = `You are a recruitment lead extraction assistant.
 Analyze this document/table and extract all company hiring contacts, company names, and recruiter/careers email addresses.
@@ -138,8 +157,7 @@ No markdown backticks, no explanatory comments.`;
     },
   };
 
-  const result = await model.generateContent([prompt, part]);
-  const text = result.response.text();
+  const text = await generateWithGeminiFallback(genAI, [prompt, part]);
   const cleanJson = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
   const parsed = JSON.parse(cleanJson);
   return Array.isArray(parsed) ? parsed : (parsed.contacts || parsed.data || []);
@@ -168,9 +186,8 @@ ${text.slice(0, 40000)}`;
 
   if (geminiApiKey) {
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    const cleanJson = result.response.text().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+    const rawText = await generateWithGeminiFallback(genAI, prompt);
+    const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(cleanJson);
     return Array.isArray(parsed) ? parsed : (parsed.contacts || parsed.data || []);
   }

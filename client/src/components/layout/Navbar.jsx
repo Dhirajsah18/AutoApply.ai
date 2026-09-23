@@ -3,7 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Search, Send, Sparkles, Mail, ChevronRight, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-export const Navbar = ({ onMenuToggle = () => {} }) => {
+export const Navbar = ({ isSidebarCollapsed = false, onMenuToggle = () => {} }) => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -57,15 +57,16 @@ export const Navbar = ({ onMenuToggle = () => {} }) => {
 
   return (
     <header className="h-16 border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl px-4 sm:px-6 md:px-8 flex items-center justify-between shrink-0 z-20 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-      {/* Left: Mobile Menu Button & Breadcrumbs */}
+      {/* Left: Mobile Menu Toggle & Clean Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs min-w-0">
+        {/* Mobile-only menu drawer trigger */}
         <button
           onClick={onMenuToggle}
           className="lg:hidden p-1.5 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 rounded-xl transition-colors shrink-0"
-          title="Open navigation menu"
+          title="Open menu"
           aria-label="Open menu"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-5 h-5 text-slate-700" />
         </button>
         <span className="hidden sm:inline text-slate-400 font-semibold">{pageInfo.category}</span>
         <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-slate-300" />

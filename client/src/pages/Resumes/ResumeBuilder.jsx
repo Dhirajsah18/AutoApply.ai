@@ -90,6 +90,23 @@ const formatCapitalize = (str) => {
   return str;
 };
 
+// Helper to render markdown bold **word** in live preview
+const renderFormattedBullet = (text) => {
+  if (!text) return null;
+  const clean = text.trim().replace(/^[-•–]\s*/, '');
+  const segments = clean.split(/(\*\*.*?\*\*)/g);
+  return segments.map((seg, i) => {
+    if (seg.startsWith('**') && seg.endsWith('**') && seg.length > 4) {
+      return (
+        <strong key={i} className="font-bold text-black bg-amber-100/70 px-0.5 rounded-xs">
+          {seg.slice(2, -2)}
+        </strong>
+      );
+    }
+    return seg;
+  });
+};
+
 const getInitialResumeData = (user) => ({
   personalInfo: {
     fullName: user?.name || 'Alex Morgan',
@@ -291,6 +308,67 @@ export const ResumeBuilder = () => {
     } catch (e) {}
     setSuccessToast('AI Enhanced Summary applied to your resume!');
     setTimeout(() => setSuccessToast(''), 4000);
+  };
+
+  // Helper to highlight or bold selected text in bullet points textarea
+  const handleToggleBoldTextarea = (textareaId, idx, sectionKey) => {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+
+    if (start !== end) {
+      const selectedText = val.substring(start, end);
+      let newText;
+      let newSelectionEnd;
+      if (selectedText.startsWith('**') && selectedText.endsWith('**') && selectedText.length > 4) {
+        const unwrapped = selectedText.slice(2, -2);
+        newText = val.substring(0, start) + unwrapped + val.substring(end);
+        newSelectionEnd = start + unwrapped.length;
+      } else {
+        const wrapped = `**${selectedText}**`;
+        newText = val.substring(0, start) + wrapped + val.substring(end);
+        newSelectionEnd = start + wrapped.length;
+      }
+      const updated = [...builderData[sectionKey]];
+      updated[idx].bullets = newText.split('\n');
+      setBuilderData({ ...builderData, [sectionKey]: updated });
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start, newSelectionEnd);
+      }, 10);
+    } else {
+      const insert = '**keyword**';
+      const newText = val.substring(0, start) + insert + val.substring(end);
+      const updated = [...builderData[sectionKey]];
+      updated[idx].bullets = newText.split('\n');
+      setBuilderData({ ...builderData, [sectionKey]: updated });
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + 2, start + insert.length - 2);
+      }, 10);
+    }
+  };
+
+  // Auto-detect and bold key metrics and technologies in bullet points
+  const handleAutoHighlightKeywords = (idx, sectionKey) => {
+    const item = builderData[sectionKey][idx];
+    if (!item || !item.bullets) return;
+
+    const techAndMetricsRegex = /\b(\d+[%+]?|\d+x|\d+k\+?|React(?:\.js)?|Node(?:\.js)?|Express(?:\.js)?|MongoDB|SQL|NoSQL|AWS|Docker|JWT|REST(?:ful)? API|TypeScript|JavaScript|Python|C\+\+|Redux|GraphQL|Next\.js|Tailwind(?: CSS)?|Microservices|CI\/CD|PostgreSQL|Redis|authentication|scalable)\b/gi;
+
+    const newBullets = item.bullets.map((line) => {
+      return line
+        .replace(techAndMetricsRegex, (match) => `**${match}**`)
+        .replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '**$1**');
+    });
+
+    const updated = [...builderData[sectionKey]];
+    updated[idx].bullets = newBullets;
+    setBuilderData({ ...builderData, [sectionKey]: updated });
+    setSuccessToast('Keywords & metrics auto-highlighted with bold!');
+    setTimeout(() => setSuccessToast(''), 3000);
   };
 
   const handleAddMissingKeyword = (keyword) => {
@@ -655,38 +733,38 @@ export const ResumeBuilder = () => {
         {/* LEFT COLUMN: Input Form Controls (Scrollable independently) */}
         <div className={`lg:col-span-6 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-2.5 pb-12 scrollbar-thin [webkit-overflow-scrolling:touch] ${mobileTab === 'edit' ? 'block' : 'hidden lg:block'}`}>
           {/* 1. Metadata Settings Card */}
-          <div className="neo-card p-4 sm:p-5 space-y-3">
+          <div className="neo-card p-5 sm:p-6 md:p-7 rounded-3xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Resume Settings</h3>
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Resume Settings</h3>
               <button
                 type="button"
                 onClick={handleStartFresh}
-                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 transition-colors"
               >
                 <FilePlus2 className="w-3.5 h-3.5" /> Start New Resume
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Resume Title</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Resume Title</label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="neo-input font-bold"
+                  className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Version Tag</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Version Tag</label>
                 <input
                   type="text"
                   value={versionTag}
                   onChange={(e) => setVersionTag(e.target.value)}
-                  className="neo-input font-bold"
+                  className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2.5 pt-1">
               <input
                 type="checkbox"
                 id="def"
@@ -701,117 +779,117 @@ export const ResumeBuilder = () => {
           </div>
 
           {/* 2. Personal Information Card */}
-          <div className="neo-card p-4 sm:p-5 space-y-3">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+          <div className="neo-card p-5 sm:p-6 md:p-7 rounded-3xl space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-600" /> Header & Contact Info
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Full Name</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name</label>
                 <input
                   type="text"
                   value={p.fullName}
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, fullName: e.target.value } })}
-                  className="neo-input font-bold"
+                  className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Email</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Email</label>
                 <input
                   type="email"
                   value={p.email}
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, email: e.target.value } })}
-                  className="neo-input font-bold"
+                  className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Phone</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone</label>
                 <input
                   type="text"
                   value={p.phone}
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, phone: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Location</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Location</label>
                 <input
                   type="text"
                   value={p.location}
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, location: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">LinkedIn Profile URL</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">LinkedIn Profile URL</label>
                 <input
                   type="text"
                   value={p.linkedin}
                   placeholder="https://linkedin.com/in/dhiraj-kumar-sah"
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, linkedin: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">GitHub Profile URL</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">GitHub Profile URL</label>
                 <input
                   type="text"
                   value={p.github}
                   placeholder="https://github.com/Dhirajsah18"
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, github: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-[11px] text-slate-600 mb-1 font-semibold">Portfolio URL</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Portfolio URL</label>
                 <input
                   type="text"
                   value={p.portfolio}
                   placeholder="https://personal-portfolio.dev"
                   onChange={(e) => setBuilderData({ ...builderData, personalInfo: { ...p, portfolio: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
             </div>
           </div>
 
           {/* 3. Professional Summary */}
-          <div className="neo-card p-4 sm:p-5 space-y-2">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Professional Summary</h3>
+          <div className="neo-card p-5 sm:p-6 md:p-7 rounded-3xl space-y-3">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Professional Summary</h3>
             <textarea
-              rows={3}
+              rows={4}
               value={builderData.summary}
               onChange={(e) => setBuilderData({ ...builderData, summary: e.target.value })}
-              className="neo-input leading-relaxed font-serif text-xs"
+              className="neo-input leading-relaxed font-serif text-xs sm:text-sm !p-4 min-h-[100px]"
             />
           </div>
 
           {/* 4. Education */}
-          <div className="neo-card p-4 sm:p-5 space-y-4">
+          <div className="neo-card p-5 sm:p-6 md:p-7 space-y-5 rounded-3xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                 <GraduationCap className="w-4 h-4 text-indigo-600" /> Education
               </h3>
               <button
                 type="button"
                 onClick={handleAddEducation}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Education
               </button>
             </div>
 
             {builderData.education.map((edu, idx) => (
-              <div key={idx} className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2.5 relative">
+              <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 relative transition-all hover:border-slate-300">
                 <button
                   type="button"
                   onClick={() => setBuilderData({ ...builderData, education: builderData.education.filter((_, i) => i !== idx) })}
-                  className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 text-xs p-1 rounded-full hover:bg-rose-50"
+                  className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1.5 rounded-full hover:bg-rose-50 transition-colors"
                   title="Delete education"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                   <input
                     type="text"
                     placeholder="Institution (e.g. Brainware University)"
@@ -821,7 +899,7 @@ export const ResumeBuilder = () => {
                       updated[idx].institution = e.target.value;
                       setBuilderData({ ...builderData, education: updated });
                     }}
-                    className="neo-input font-bold"
+                    className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -832,7 +910,7 @@ export const ResumeBuilder = () => {
                       updated[idx].dates = e.target.value;
                       setBuilderData({ ...builderData, education: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -843,7 +921,7 @@ export const ResumeBuilder = () => {
                       updated[idx].degree = e.target.value;
                       setBuilderData({ ...builderData, education: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -854,7 +932,7 @@ export const ResumeBuilder = () => {
                       updated[idx].gpa = e.target.value;
                       setBuilderData({ ...builderData, education: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -865,7 +943,7 @@ export const ResumeBuilder = () => {
                       updated[idx].location = e.target.value;
                       setBuilderData({ ...builderData, education: updated });
                     }}
-                    className="neo-input sm:col-span-2"
+                    className="neo-input sm:col-span-2 !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                 </div>
               </div>
@@ -873,31 +951,31 @@ export const ResumeBuilder = () => {
           </div>
 
           {/* 5. Work Experience */}
-          <div className="neo-card p-4 sm:p-5 space-y-4">
+          <div className="neo-card p-5 sm:p-6 md:p-7 space-y-5 rounded-3xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-indigo-600" /> Experience
               </h3>
               <button
                 type="button"
                 onClick={handleAddExperience}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Experience
               </button>
             </div>
 
             {builderData.experience.map((exp, idx) => (
-              <div key={idx} className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2.5 relative">
+              <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 relative transition-all hover:border-slate-300">
                 <button
                   type="button"
                   onClick={() => setBuilderData({ ...builderData, experience: builderData.experience.filter((_, i) => i !== idx) })}
-                  className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 text-xs p-1 rounded-full hover:bg-rose-50"
+                  className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1.5 rounded-full hover:bg-rose-50 transition-colors"
                   title="Delete experience"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                   <input
                     type="text"
                     placeholder="Company (e.g. YBI Foundation)"
@@ -907,7 +985,7 @@ export const ResumeBuilder = () => {
                       updated[idx].company = e.target.value;
                       setBuilderData({ ...builderData, experience: updated });
                     }}
-                    className="neo-input font-bold"
+                    className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -918,7 +996,7 @@ export const ResumeBuilder = () => {
                       updated[idx].dates = e.target.value;
                       setBuilderData({ ...builderData, experience: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -929,7 +1007,7 @@ export const ResumeBuilder = () => {
                       updated[idx].role = e.target.value;
                       setBuilderData({ ...builderData, experience: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -940,23 +1018,44 @@ export const ResumeBuilder = () => {
                       updated[idx].location = e.target.value;
                       setBuilderData({ ...builderData, experience: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-600 mb-1 font-semibold">
-                    Bullet Points (one accomplishment per line):
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span>Bullet Points (one accomplishment per line):</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBoldTextarea(`exp-bullets-${idx}`, idx, 'experience')}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-bold transition-all shadow-xs"
+                        title="Select text and click to bold/highlight"
+                      >
+                        Bold
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAutoHighlightKeywords(idx, 'experience')}
+                        className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-bold transition-all shadow-xs"
+                        title="Automatically bold key metrics and technologies"
+                      >
+                        Auto-Bold
+                      </button>
+                    </div>
+                  </div>
                   <textarea
-                    rows={3}
-                    placeholder="– Developed a natural language to SQL system..."
+                    id={`exp-bullets-${idx}`}
+                    rows={4}
+                    placeholder="– Developed a natural language to SQL system supporting **100+ queries**..."
                     value={exp.bullets?.join('\n') || ''}
                     onChange={(e) => {
                       const updated = [...builderData.experience];
                       updated[idx].bullets = e.target.value.split('\n');
                       setBuilderData({ ...builderData, experience: updated });
                     }}
-                    className="neo-input text-xs leading-relaxed font-serif"
+                    className="neo-input text-xs sm:text-sm leading-relaxed font-sans !p-3.5 sm:!p-4 min-h-[120px]"
                   />
                 </div>
               </div>
@@ -964,31 +1063,31 @@ export const ResumeBuilder = () => {
           </div>
 
           {/* 6. Featured Projects (Live Demo Link + GitHub Code Link) */}
-          <div className="neo-card p-4 sm:p-5 space-y-4">
+          <div className="neo-card p-5 sm:p-6 md:p-7 space-y-5 rounded-3xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                 <FolderGit2 className="w-4 h-4 text-indigo-600" /> Featured Projects
               </h3>
               <button
                 type="button"
                 onClick={handleAddProject}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+                className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 px-3 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Project
               </button>
             </div>
 
             {builderData.projects.map((proj, idx) => (
-              <div key={idx} className="p-4 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2.5 relative">
+              <div key={idx} className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 relative transition-all hover:border-slate-300">
                 <button
                   type="button"
                   onClick={() => setBuilderData({ ...builderData, projects: builderData.projects.filter((_, i) => i !== idx) })}
-                  className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 text-xs p-1 rounded-full hover:bg-rose-50"
+                  className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1.5 rounded-full hover:bg-rose-50 transition-colors"
                   title="Delete project"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                   <input
                     type="text"
                     placeholder="Project Name (e.g. V-Tube – Video Streaming Platform)"
@@ -998,7 +1097,7 @@ export const ResumeBuilder = () => {
                       updated[idx].name = e.target.value;
                       setBuilderData({ ...builderData, projects: updated });
                     }}
-                    className="neo-input font-bold"
+                    className="neo-input font-bold !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <input
                     type="text"
@@ -1009,7 +1108,7 @@ export const ResumeBuilder = () => {
                       updated[idx].dates = e.target.value;
                       setBuilderData({ ...builderData, projects: updated });
                     }}
-                    className="neo-input"
+                    className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                   <div className="relative">
                     <input
@@ -1021,9 +1120,9 @@ export const ResumeBuilder = () => {
                         updated[idx].liveUrl = e.target.value;
                         setBuilderData({ ...builderData, projects: updated });
                       }}
-                      className="neo-input !pl-8 text-xs"
+                      className="neo-input !py-2.5 sm:!py-3 !pl-9 !pr-4 text-xs sm:text-sm"
                     />
-                    <ExternalLink className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <ExternalLink className="w-4 h-4 text-indigo-600 absolute left-3 top-1/2 -translate-y-1/2" />
                   </div>
                   <div className="relative">
                     <input
@@ -1036,9 +1135,9 @@ export const ResumeBuilder = () => {
                         updated[idx].githubUrl = e.target.value;
                         setBuilderData({ ...builderData, projects: updated });
                       }}
-                      className="neo-input !pl-8 text-xs"
+                      className="neo-input !py-2.5 sm:!py-3 !pl-9 !pr-4 text-xs sm:text-sm"
                     />
-                    <GithubIcon className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <GithubIcon className="w-4 h-4 text-indigo-600 absolute left-3 top-1/2 -translate-y-1/2" />
                   </div>
                   <input
                     type="text"
@@ -1049,23 +1148,44 @@ export const ResumeBuilder = () => {
                       updated[idx].technologies = e.target.value;
                       setBuilderData({ ...builderData, projects: updated });
                     }}
-                    className="neo-input sm:col-span-2"
+                    className="neo-input sm:col-span-2 !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-600 mb-1 font-semibold">
-                    Bullet Points (one feature/achievement per line):
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span>Bullet Points (one feature/achievement per line):</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBoldTextarea(`proj-bullets-${idx}`, idx, 'projects')}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-bold transition-all shadow-xs"
+                        title="Select text and click to bold/highlight"
+                      >
+                        Bold
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAutoHighlightKeywords(idx, 'projects')}
+                        className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-bold transition-all shadow-xs"
+                        title="Automatically bold key metrics and technologies"
+                      >
+                        Auto-Bold
+                      </button>
+                    </div>
+                  </div>
                   <textarea
-                    rows={3}
-                    placeholder="– Architected a scalable video sharing platform..."
+                    id={`proj-bullets-${idx}`}
+                    rows={4}
+                    placeholder="– Architected a scalable **video sharing platform** supporting **user authentication**..."
                     value={proj.bullets?.join('\n') || ''}
                     onChange={(e) => {
                       const updated = [...builderData.projects];
                       updated[idx].bullets = e.target.value.split('\n');
                       setBuilderData({ ...builderData, projects: updated });
                     }}
-                    className="neo-input text-xs leading-relaxed font-serif"
+                    className="neo-input text-xs sm:text-sm leading-relaxed font-sans !p-3.5 sm:!p-4 min-h-[120px]"
                   />
                 </div>
               </div>
@@ -1073,88 +1193,90 @@ export const ResumeBuilder = () => {
           </div>
 
           {/* 7. Categorized Skills */}
-          <div className="neo-card p-4 sm:p-5 space-y-3">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+          <div className="neo-card p-5 sm:p-6 md:p-7 rounded-3xl space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <Code2 className="w-4 h-4 text-indigo-600" /> Skills & Technologies
             </h3>
-            <div className="space-y-2.5">
+            <div className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Languages</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Languages</label>
                 <input
                   type="text"
                   placeholder="C++, Python, HTML, CSS, JavaScript, SQL"
                   value={sc.languages || ''}
                   onChange={(e) => setBuilderData({ ...builderData, skillsCategories: { ...sc, languages: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Frameworks & Libraries</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Frameworks & Libraries</label>
                 <input
                   type="text"
                   placeholder="React.js, Node.js, Express.js"
                   value={sc.frameworks || ''}
                   onChange={(e) => setBuilderData({ ...builderData, skillsCategories: { ...sc, frameworks: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Databases</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Databases</label>
                 <input
                   type="text"
                   placeholder="MongoDB, MySQL"
                   value={sc.databases || ''}
                   onChange={(e) => setBuilderData({ ...builderData, skillsCategories: { ...sc, databases: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Developer Tools</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Developer Tools</label>
                 <input
                   type="text"
                   placeholder="GitHub, VS Code, Postman"
                   value={sc.tools || ''}
                   onChange={(e) => setBuilderData({ ...builderData, skillsCategories: { ...sc, tools: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Soft Skills</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Soft Skills</label>
                 <input
                   type="text"
                   placeholder="Problem Solving, Analytical Thinking, Team Collaboration"
                   value={sc.softSkills || ''}
                   onChange={(e) => setBuilderData({ ...builderData, skillsCategories: { ...sc, softSkills: e.target.value } })}
-                  className="neo-input"
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
                 />
               </div>
             </div>
           </div>
 
           {/* 8. Relevant Coursework & Certifications */}
-          <div className="neo-card p-4 sm:p-5 space-y-4">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+          <div className="neo-card p-5 sm:p-6 md:p-7 rounded-3xl space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600" /> Coursework & Certifications
             </h3>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">Relevant Coursework (comma-separated)</label>
-              <input
-                type="text"
-                placeholder="Data Structures, Operating Systems, DBMS, Machine Learning"
-                value={builderData.coursework?.join(', ') || ''}
-                onChange={(e) => setBuilderData({ ...builderData, coursework: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                className="neo-input"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">Certifications (comma-separated)</label>
-              <input
-                type="text"
-                placeholder="Intel Machine Learning, Infosys Programming Fundamentals"
-                value={builderData.certifications?.map(c => typeof c === 'string' ? c : c.name).join(', ') || ''}
-                onChange={(e) => setBuilderData({ ...builderData, certifications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                className="neo-input"
-              />
+            <div className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Relevant Coursework (comma-separated)</label>
+                <input
+                  type="text"
+                  placeholder="Data Structures, Operating Systems, DBMS, Machine Learning"
+                  value={builderData.coursework?.join(', ') || ''}
+                  onChange={(e) => setBuilderData({ ...builderData, coursework: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Certifications (comma-separated)</label>
+                <input
+                  type="text"
+                  placeholder="Intel Machine Learning, Infosys Programming Fundamentals"
+                  value={builderData.certifications?.map(c => typeof c === 'string' ? c : c.name).join(', ') || ''}
+                  onChange={(e) => setBuilderData({ ...builderData, certifications: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  className="neo-input !py-2.5 sm:!py-3 !px-4 text-xs sm:text-sm"
+                />
+              </div>
             </div>
           </div>
 
@@ -1272,64 +1394,55 @@ export const ResumeBuilder = () => {
                     {formatCapitalize(p.fullName || 'Dhiraj Kumar Sah')}
                   </h1>
 
-                  {/* Contact links bar with properly aligned icons */}
-                  <div className="text-[11.5px] text-black font-serif mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
-                    {p.phone && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-black shrink-0" />
-                        <span>{p.phone}</span>
-                      </span>
-                    )}
+                  {/* Contact links bar with clean ATS pipe separators */}
+                  <div className="text-[11.5px] text-black font-serif mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1">
+                    {p.phone && <span>{p.phone}</span>}
+
+                    {p.phone && p.email && <span className="text-slate-400">|</span>}
 
                     {p.email && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-black shrink-0" />
-                        <a href={`mailto:${p.email}`} className="underline underline-offset-2 hover:text-cyan-800 transition-colors">
-                          {p.email}
-                        </a>
-                      </span>
+                      <a href={`mailto:${p.email}`} className="underline underline-offset-2 hover:text-indigo-800 transition-colors">
+                        {p.email}
+                      </a>
                     )}
+
+                    {p.email && p.linkedin && <span className="text-slate-400">|</span>}
 
                     {p.linkedin && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <LinkedinIcon className="w-3.5 h-3.5 text-black shrink-0" />
-                        <a
-                          href={p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
-                        >
-                          LinkedIn
-                        </a>
-                      </span>
+                      <a
+                        href={p.linkedin.startsWith('http') ? p.linkedin : `https://${p.linkedin}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-indigo-800 transition-colors"
+                      >
+                        LinkedIn
+                      </a>
                     )}
+
+                    {p.linkedin && p.github && <span className="text-slate-400">|</span>}
 
                     {p.github && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <GithubIcon className="w-3.5 h-3.5 text-black shrink-0" />
-                        <a
-                          href={p.github.startsWith('http') ? p.github : `https://${p.github}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
-                        >
-                          GitHub
-                        </a>
-                      </span>
+                      <a
+                        href={p.github.startsWith('http') ? p.github : `https://${p.github}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-indigo-800 transition-colors"
+                      >
+                        GitHub
+                      </a>
                     )}
 
+                    {p.github && p.portfolio && <span className="text-slate-400">|</span>}
+
                     {p.portfolio && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Globe className="w-3.5 h-3.5 text-black shrink-0" />
-                        <a
-                          href={p.portfolio.startsWith('http') ? p.portfolio : `https://${p.portfolio}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2 hover:text-cyan-800 transition-colors"
-                        >
-                          Portfolio
-                        </a>
-                      </span>
+                      <a
+                        href={p.portfolio.startsWith('http') ? p.portfolio : `https://${p.portfolio}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-indigo-800 transition-colors"
+                      >
+                        Portfolio
+                      </a>
                     )}
                   </div>
                 </div>
@@ -1391,7 +1504,7 @@ export const ResumeBuilder = () => {
                               {exp.bullets.filter(Boolean).map((b, i) => (
                                 <li key={i} className="flex items-start">
                                   <span className="mr-1.5 shrink-0">–</span>
-                                  <span className="leading-relaxed text-justify">{b}</span>
+                                  <span className="leading-relaxed text-justify">{renderFormattedBullet(b)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1415,29 +1528,27 @@ export const ResumeBuilder = () => {
                             <div className="flex items-center flex-wrap gap-1.5">
                               <span className="font-bold text-black">{proj.name || 'Project Name'}</span>
                               
-                              {/* Clickable Live Project Icon */}
+                              {/* Clickable Live Project Link */}
                               {proj.liveUrl && (
                                 <a
                                   href={proj.liveUrl.startsWith('http') ? proj.liveUrl : `https://${proj.liveUrl}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  title="Live Demo"
-                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors cursor-pointer"
+                                  className="text-[10px] text-indigo-600 underline font-sans hover:text-indigo-800 transition-colors"
                                 >
-                                  <ExternalLink className="w-3.5 h-3.5 inline-block align-middle" />
+                                  [Live Demo]
                                 </a>
                               )}
 
-                              {/* Clickable GitHub Code Icon */}
+                              {/* Clickable GitHub Code Link */}
                               {(proj.repoUrl || proj.githubUrl) && (
                                 <a
                                   href={(proj.repoUrl || proj.githubUrl).startsWith('http') ? (proj.repoUrl || proj.githubUrl) : `https://${proj.repoUrl || proj.githubUrl}`}
                                   target="_blank"
                                   rel="noreferrer"
-                                  title="GitHub Code"
-                                  className="inline-flex items-center text-black hover:text-indigo-600 transition-colors cursor-pointer"
+                                  className="text-[10px] text-indigo-600 underline font-sans hover:text-indigo-800 transition-colors"
                                 >
-                                  <GithubIcon className="w-3.5 h-3.5 inline-block align-middle" />
+                                  [Code]
                                 </a>
                               )}
 
@@ -1455,7 +1566,7 @@ export const ResumeBuilder = () => {
                               {proj.bullets.filter(Boolean).map((b, i) => (
                                 <li key={i} className="flex items-start">
                                   <span className="mr-1.5 shrink-0">–</span>
-                                  <span className="leading-relaxed text-justify">{b}</span>
+                                  <span className="leading-relaxed text-justify">{renderFormattedBullet(b)}</span>
                                 </li>
                               ))}
                             </ul>

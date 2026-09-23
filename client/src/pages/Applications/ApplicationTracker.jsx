@@ -15,6 +15,7 @@ import api from '../../api/client';
 
 const STATUS_TABS = [
   { id: 'ALL', label: 'All' },
+  { id: 'QUEUED', label: 'Queued (5-Min Pace)' },
   { id: 'SENT', label: 'Sent' },
   { id: 'FOLLOW_UP_DUE', label: 'Follow-up Due' },
   { id: 'REPLIED', label: 'Replied' },
@@ -25,6 +26,8 @@ const STATUS_TABS = [
 
 const STATUS_BADGES = {
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-300',
+  QUEUED: 'bg-cyan-50 text-cyan-700 border-cyan-300 animate-pulse',
+  PROCESSING: 'bg-indigo-50 text-indigo-700 border-indigo-300 animate-pulse',
   SENT: 'bg-sky-50 text-sky-700 border-sky-300',
   FOLLOW_UP_DUE: 'bg-amber-50 text-amber-700 border-amber-300',
   REPLIED: 'bg-blue-50 text-blue-700 border-blue-300',
@@ -64,6 +67,20 @@ export const ApplicationTracker = () => {
   useEffect(() => {
     fetchApplications();
   }, [statusFilter, search]);
+
+  // Auto-refresh when applications are in QUEUED or PROCESSING state
+  useEffect(() => {
+    const hasActiveQueue = applications.some(
+      (a) => a.status === 'QUEUED' || a.status === 'PROCESSING'
+    );
+    if (!hasActiveQueue) return;
+
+    const pollInterval = setInterval(() => {
+      fetchApplications();
+    }, 15000);
+
+    return () => clearInterval(pollInterval);
+  }, [applications]);
 
   const handleStatusChange = async (appId, newStatus) => {
     try {
@@ -230,6 +247,8 @@ export const ApplicationTracker = () => {
                         }}
                       >
                         <option value="DRAFT">Draft</option>
+                        <option value="QUEUED">Queued (5-Min Pace)</option>
+                        <option value="PROCESSING">Processing</option>
                         <option value="SENT">Sent</option>
                         <option value="FOLLOW_UP_DUE">Follow-up Due</option>
                         <option value="REPLIED">Replied</option>
@@ -240,7 +259,20 @@ export const ApplicationTracker = () => {
                     </td>
 
                     <td className="px-5 py-3.5 text-slate-500 text-[11px] font-medium">
-                      {app.sentAt ? new Date(app.sentAt).toLocaleDateString() : 'Draft'}
+                      {app.status === 'QUEUED' && app.scheduledFor ? (
+                        <div className="flex flex-col">
+                          <span className="font-bold text-cyan-700">
+                            Scheduled: {new Date(app.scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="text-[10px] text-slate-400">Paced Anti-Spam</span>
+                        </div>
+                      ) : app.status === 'PROCESSING' ? (
+                        <span className="font-bold text-indigo-600 animate-pulse">Sending Now...</span>
+                      ) : app.sentAt ? (
+                        new Date(app.sentAt).toLocaleDateString()
+                      ) : (
+                        'Draft'
+                      )}
                     </td>
 
                     <td className="px-5 py-3.5 text-right">

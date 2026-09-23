@@ -4,7 +4,68 @@ import { Resume } from '../models/Resume.js';
 import { User } from '../models/User.js';
 import { sendJobApplicationEmail } from '../services/emailService.js';
 import { resolveResumeFilePath } from './resumeController.js';
+import {
+  calculateScheduledTimes,
+  runQueueTick,
+  getUserQueueStatus,
+  EMAIL_QUEUE_INTERVAL_MS,
+} from '../services/emailQueueService.js';
 
+export const DAILY_APPLICATION_LIMIT = 25;
+
+/**
+ * Calculate user's daily application quota statistics (UTC-based)
+ */
+export const getDailyQuotaStats = async (userId) => {
+  const now = new Date();
+  const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const endOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+
+  // Count all applications submitted today that were queued, sent, or processed (excluding raw drafts)
+  const usedToday = await Application.countDocuments({
+    userId,
+    createdAt: { $gte: startOfDay },
+    status: { $ne: 'DRAFT' },
+  });
+
+  const remaining = Math.max(0, DAILY_APPLICATION_LIMIT - usedToday);
+
+  return {
+    dailyLimit: DAILY_APPLICATION_LIMIT,
+    usedToday,
+    remaining,
+    resetsAt: endOfDay,
+    intervalMinutes: EMAIL_QUEUE_INTERVAL_MS / 60000,
+  };
+};
+
+/**
+ * GET /api/applications/quota
+ */
+export const getDailyQuota = async (req, res, next) => {
+  try {
+    const quota = await getDailyQuotaStats(req.user._id);
+    res.json({ success: true, quota });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/applications/queue-status
+ */
+export const getQueueStatus = async (req, res, next) => {
+  try {
+    const queue = await getUserQueueStatus(req.user._id);
+    res.json({ success: true, queue });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/applications
+ */
 export const listApplications = async (req, res, next) => {
   try {
     const { status, search, limit = 50, page = 1 } = req.query;
@@ -29,7 +90,8 @@ export const listApplications = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit, 10))
-      .populate('resumeId', 'title versionTag originalFileName filePath type');
+      .populate('resumeId', 'title versionTag originalFileName filePath type')
+      .lean();
 
     res.json({
       success: true,
@@ -43,11 +105,15 @@ export const listApplications = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/applications/:id
+ */
 export const getApplication = async (req, res, next) => {
   try {
     const application = await Application.findOne({ _id: req.params.id, userId: req.user._id })
       .populate('resumeId')
-      .populate('contactId');
+      .populate('contactId')
+      .lean();
 
     if (!application) {
       return res.status(404).json({ success: false, error: { message: 'Application not found' } });
@@ -59,6 +125,9 @@ export const getApplication = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/applications/draft
+ */
 export const createApplicationDraft = async (req, res, next) => {
   try {
     const {
@@ -76,7 +145,7 @@ export const createApplicationDraft = async (req, res, next) => {
 
     let resumeTitle = '';
     if (resumeId && mongoose.Types.ObjectId.isValid(resumeId)) {
-      const r = await Resume.findOne({ _id: resumeId, userId: req.user._id });
+      const r = await Resume.findOne({ _id: resumeId, userId: req.user._id }).lean();
       if (r) resumeTitle = r.title;
     }
 
@@ -103,6 +172,10 @@ export const createApplicationDraft = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/applications/send-batch
+ * Paced email queue dispatch: 1 email every 5 minutes (enforces max 25 apps/day)
+ */
 export const sendBatchApplications = async (req, res, next) => {
   try {
     const { items, resumeId, defaultSubject, defaultBody } = req.body;
@@ -111,6 +184,44 @@ export const sendBatchApplications = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: { message: 'Please provide at least one target contact.' },
+      });
+    }
+
+    // 1. Validate Daily Quota (Max 25 applications/day)
+    const quota = await getDailyQuotaStats(req.user._id);
+
+    if (quota.remaining <= 0) {
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'DAILY_LIMIT_REACHED',
+          message: `Daily limit of ${DAILY_APPLICATION_LIMIT} relevant applications reached for today. Your quota resets at midnight UTC.`,
+          quota,
+        },
+      });
+    }
+
+    // Filter valid recipients
+    const validItems = items.filter((item) => {
+      const email = (item.recipientEmail || item.email || '').trim();
+      return email.length > 0;
+    });
+
+    if (validItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Please provide contacts with valid email addresses.' },
+      });
+    }
+
+    if (validItems.length > quota.remaining) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'QUOTA_EXCEEDED',
+          message: `You selected ${validItems.length} applications, but you only have ${quota.remaining} remaining for today (Daily Limit: ${DAILY_APPLICATION_LIMIT}). Please select up to ${quota.remaining} contacts.`,
+          quota,
+        },
       });
     }
 
@@ -124,21 +235,24 @@ export const sendBatchApplications = async (req, res, next) => {
                        await Resume.findOne({ userId: req.user._id }).sort({ createdAt: -1 });
     }
 
-    const results = [];
-    const validAttachmentPath = selectedResume ? await resolveResumeFilePath(selectedResume) : null;
+    // 2. Calculate 5-minute interval scheduled dispatch times for the batch
+    const scheduledTimes = await calculateScheduledTimes(user._id, validItems.length);
 
-    for (const item of items) {
+    const createdApplications = [];
+
+    for (let i = 0; i < validItems.length; i++) {
+      const item = validItems[i];
+      const scheduledFor = scheduledTimes[i];
+
       const companyName = item.companyName || 'Company';
       const position = item.position || 'Software Engineer';
       const recipientName = item.recipientName || item.contactName || 'Hiring Manager';
       const recipientEmail = (item.recipientEmail || item.email || '').toLowerCase().trim();
 
-      if (!recipientEmail) continue;
-
       let subject = item.subject || defaultSubject || `Application for ${position} - ${user.name}`;
       let body = item.body || defaultBody || `Dear ${recipientName},\n\nPlease find my resume attached for the ${position} position at ${companyName}.\n\nBest regards,\n${user.name}`;
 
-      // Personalize placeholders if present
+      // Personalize placeholders
       subject = subject
         .replaceAll('{{companyName}}', companyName)
         .replaceAll('{{position}}', position)
@@ -154,32 +268,6 @@ export const sendBatchApplications = async (req, res, next) => {
         .replaceAll('{{github}}', user.links?.github || '')
         .replaceAll('{{linkedin}}', user.links?.linkedin || '');
 
-      let deliveryResult;
-      let deliveryStatus = 'PENDING';
-      let messageId = '';
-
-      try {
-        deliveryResult = await sendJobApplicationEmail({
-          user,
-          to: recipientEmail,
-          recipientName,
-          subject,
-          body,
-          attachmentPath: validAttachmentPath,
-          attachmentName: selectedResume?.originalFileName || `${user.name.replace(/\s+/g, '_')}_Resume.pdf`,
-        });
-
-        deliveryStatus = deliveryResult.success ? 'DELIVERED' : 'FAILED';
-        messageId = deliveryResult.messageId;
-      } catch (sendErr) {
-        console.error(`Failed sending to ${recipientEmail}:`, sendErr.message);
-        deliveryStatus = 'FAILED';
-      }
-
-      // Calculate follow-up reminder date (+5 business days)
-      const followUpDate = new Date();
-      followUpDate.setDate(followUpDate.getDate() + 5);
-
       const app = await Application.create({
         userId: user._id,
         contactId: (item.contactId && mongoose.Types.ObjectId.isValid(item.contactId)) ? item.contactId : undefined,
@@ -193,31 +281,42 @@ export const sendBatchApplications = async (req, res, next) => {
         resumeTitle: selectedResume?.title || 'Default Resume',
         subject,
         body,
-        status: deliveryStatus === 'DELIVERED' ? 'SENT' : 'DRAFT',
-        deliveryStatus,
-        sentAt: deliveryStatus === 'DELIVERED' ? new Date() : undefined,
-        followUpAt: deliveryStatus === 'DELIVERED' ? followUpDate : undefined,
-        providerMessageId: messageId,
+        status: 'QUEUED',
+        deliveryStatus: 'PENDING',
+        scheduledFor,
+        queuedAt: new Date(),
         history: [{
-          action: deliveryStatus === 'DELIVERED' ? 'Application Sent' : 'Send Failed',
+          action: 'Queued for Delivery',
           timestamp: new Date(),
-          details: `Sent to ${recipientEmail} with attachment: ${selectedResume?.title || 'None'}`,
+          details: `Scheduled for dispatch at ${scheduledFor.toLocaleTimeString()} (5-min anti-spam pace)`,
         }],
       });
 
-      results.push(app);
+      createdApplications.push(app);
     }
+
+    // 3. Immediately trigger background queue worker (non-blocking)
+    runQueueTick().catch((err) => console.error('[Queue Trigger Error]', err));
+
+    const updatedQuota = await getDailyQuotaStats(user._id);
 
     res.status(201).json({
       success: true,
-      count: results.length,
-      applications: results,
+      queued: true,
+      count: createdApplications.length,
+      intervalMinutes: EMAIL_QUEUE_INTERVAL_MS / 60000,
+      applications: createdApplications,
+      quota: updatedQuota,
+      message: `Successfully queued ${createdApplications.length} application(s). Dispatching 1 email every 5 minutes in background to prevent spam filters.`,
     });
   } catch (err) {
     next(err);
   }
 };
 
+/**
+ * PATCH /api/applications/:id/status
+ */
 export const updateApplicationStatus = async (req, res, next) => {
   try {
     const { status, notes, followUpAt } = req.body;
@@ -246,6 +345,9 @@ export const updateApplicationStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/applications/:id/follow-up
+ */
 export const sendFollowUpEmail = async (req, res, next) => {
   try {
     const { subject, body } = req.body;
@@ -296,6 +398,9 @@ export const sendFollowUpEmail = async (req, res, next) => {
   }
 };
 
+/**
+ * DELETE /api/applications/:id
+ */
 export const deleteApplication = async (req, res, next) => {
   try {
     const application = await Application.findOneAndDelete({ _id: req.params.id, userId: req.user._id });

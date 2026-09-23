@@ -12,6 +12,8 @@ import {
   Building2,
   Calendar,
   ChevronRight,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -44,11 +46,15 @@ export const Dashboard = () => {
     totalResumes: 0,
     totalContacts: 0,
     sentCount: 0,
+    queuedCount: 0,
     followUpDueCount: 0,
     interviewCount: 0,
     offerCount: 0,
     responseRate: 0,
   };
+
+  const dailyQuota = data?.dailyQuota || { dailyLimit: 25, usedToday: 0, remaining: 25 };
+  const queueStatus = data?.queueStatus || { activeCount: 0, upcoming: [] };
 
   const currentDayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
   const trends = data?.applicationTrends || [
@@ -71,6 +77,40 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Active 5-Minute Queue Alert Banner */}
+      {queueStatus.activeCount > 0 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-slate-900 border border-cyan-800/40 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#06969C]/20 border border-[#06969C]/40 flex items-center justify-center text-[#06969C] shrink-0 animate-pulse">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-100">Anti-Spam Email Queue Active</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                  {queueStatus.activeCount} Pending
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                Paced delivery: 1 email dispatched every 5 minutes in background to protect sender score.
+                {queueStatus.secondsToNext && (
+                  <span className="text-cyan-300 font-semibold ml-1.5">
+                    Next send in ~{Math.max(1, Math.ceil(queueStatus.secondsToNext / 60))}m
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/applications"
+            className="px-4 py-2 rounded-xl bg-[#06969C]/20 hover:bg-[#06969C]/30 border border-[#06969C]/40 text-[#06969C] text-xs font-bold transition-all shrink-0"
+          >
+            View Live Queue →
+          </Link>
+        </div>
+      )}
+
       {/* Top 3-Card Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Card 1: Overview Statistics (4 cols) */}
@@ -179,6 +219,27 @@ export const Dashboard = () => {
             }`}>
               <span className={`w-2 h-2 rounded-full ${stats.totalContacts > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
               <span className="text-[10px] font-extrabold">{stats.totalContacts > 0 ? 'Ready' : 'Setup'}</span>
+            </div>
+          </div>
+
+          {/* Daily Quota Tracking Bar */}
+          <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-bold text-slate-700 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#06969C]" />
+                Daily Outreach Quota:
+              </span>
+              <span className="font-black text-[#06969C]">
+                {dailyQuota.usedToday} / {dailyQuota.dailyLimit} used ({dailyQuota.remaining} left)
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-200/70 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  dailyQuota.remaining === 0 ? 'bg-rose-500' : dailyQuota.remaining <= 5 ? 'bg-amber-500' : 'bg-[#06969C]'
+                }`}
+                style={{ width: `${Math.min(100, Math.round((dailyQuota.usedToday / dailyQuota.dailyLimit) * 100))}%` }}
+              />
             </div>
           </div>
 

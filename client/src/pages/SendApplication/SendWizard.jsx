@@ -19,6 +19,9 @@ import {
   ChevronRight,
   ArrowRight,
   FileSpreadsheet,
+  Clock,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -68,21 +71,32 @@ export const SendWizard = () => {
   const [sending, setSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const [sentResults, setSentResults] = useState([]);
+  const [dailyQuota, setDailyQuota] = useState({ dailyLimit: 25, usedToday: 0, remaining: 25 });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cRes, rRes, tRes] = await Promise.all([
+        const [cRes, rRes, tRes, qRes] = await Promise.all([
           api.get('/contacts'),
           api.get('/resumes'),
           api.get('/templates'),
+          api.get('/applications/quota').catch(() => ({ data: { success: false } })),
         ]);
+
+        let remainingQuota = 25;
+        if (qRes.data?.success && qRes.data.quota) {
+          setDailyQuota(qRes.data.quota);
+          remainingQuota = qRes.data.quota.remaining;
+        }
 
         if (cRes.data.success) {
           setContacts(cRes.data.contacts);
-          // Pre-select all contacts by default for convenience in multi-mode
+          // Pre-select contacts up to available daily quota
           if (cRes.data.contacts.length > 0) {
-            setSelectedContactIds(cRes.data.contacts.map((c) => c._id));
+            const initialSelection = cRes.data.contacts
+              .slice(0, Math.min(cRes.data.contacts.length, remainingQuota))
+              .map((c) => c._id);
+            setSelectedContactIds(initialSelection);
           }
         }
 
@@ -255,6 +269,11 @@ export const SendWizard = () => {
   const handleSendBatch = async (e) => {
     e.preventDefault();
 
+    if (dailyQuota.remaining <= 0) {
+      alert('Daily outreach limit of 25 relevant applications reached for today. Your quota resets at midnight UTC.');
+      return;
+    }
+
     let itemsToSend = [];
 
     if (outreachMode === 'single') {
@@ -275,6 +294,10 @@ export const SendWizard = () => {
         const selectedList = contacts.filter((c) => selectedContactIds.includes(c._id));
         if (selectedList.length === 0) {
           alert('Please select at least 1 HR contact from the list.');
+          return;
+        }
+        if (selectedList.length > dailyQuota.remaining) {
+          alert(`You selected ${selectedList.length} contacts, but you only have ${dailyQuota.remaining} application(s) remaining today (Daily limit: 25). Please uncheck some contacts.`);
           return;
         }
         itemsToSend = selectedList.map((c) => ({
@@ -323,6 +346,9 @@ export const SendWizard = () => {
       const res = await api.post('/applications/send-batch', payload);
       if (res.data.success) {
         setSentResults(res.data.applications || itemsToSend);
+        if (res.data.quota) {
+          setDailyQuota(res.data.quota);
+        }
         setSendSuccess(true);
 
         confetti({
@@ -332,7 +358,8 @@ export const SendWizard = () => {
         });
       }
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to dispatch email batch');
+      const errorMsg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to dispatch email batch';
+      alert(errorMsg);
     } finally {
       setSending(false);
     }
@@ -413,8 +440,58 @@ export const SendWizard = () => {
         </div>
       </div>
 
+      {/* Daily Quota & 5-Min Paced Queue Notice Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Daily Quota Card */}
+        <div className="md:col-span-2 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#06969C]/10 border border-[#06969C]/20 flex items-center justify-center text-[#06969C] shrink-0 font-black text-sm">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-900">Daily Relevant Applications Quota</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                  Anti-Spam Limit
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                Maximum 25 relevant applications allowed per day. Resets daily at midnight UTC.
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right shrink-0">
+            <span className={`text-base font-black ${dailyQuota.remaining === 0 ? 'text-rose-600' : 'text-[#06969C]'}`}>
+              {dailyQuota.remaining} <span className="text-xs font-semibold text-slate-400">/ 25 left</span>
+            </span>
+            <div className="w-24 h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  dailyQuota.remaining === 0 ? 'bg-rose-500' : dailyQuota.remaining <= 5 ? 'bg-amber-500' : 'bg-[#06969C]'
+                }`}
+                style={{ width: `${Math.min(100, Math.round(((25 - dailyQuota.remaining) / 25) * 100))}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 5-Min Paced Queue Card */}
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-900">5-Min Paced Queue</span>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+              1 email sent every 5 minutes in background so emails never get marked as spam.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {sendSuccess ? (
-        /* Sent Confirmation Screen */
+        /* Sent / Queued Confirmation Screen */
         <div className="neo-card p-8 md:p-10 text-center space-y-5 border-t-4 border-t-emerald-500">
           <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-md">
             <CheckCircle2 className="w-9 h-9" />
@@ -422,12 +499,15 @@ export const SendWizard = () => {
 
           <div>
             <h2 className="text-2xl font-black text-slate-900">
-              Emails Sent Successfully!
+              Applications Queued for Delivery!
             </h2>
             <p className="text-xs md:text-sm text-slate-600 mt-1 font-medium max-w-lg mx-auto">
-              Your application was sent to{' '}
-              <strong className="text-indigo-600 font-extrabold">{sentResults.length} contact(s)</strong> with your attached resume.
+              Your batch of <strong className="text-indigo-600 font-extrabold">{sentResults.length} application(s)</strong> has been successfully queued.
             </p>
+            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
+              <Clock className="w-3.5 h-3.5" />
+              1st email is being sent now. Subsequent emails will dispatch automatically every 5 minutes in background.
+            </div>
           </div>
 
           {/* List of Sent HRs */}
@@ -851,28 +931,47 @@ export const SendWizard = () => {
                     {selectedResume?.title || 'Default Resume'}
                   </strong>
                 </span>
+                <span className="mx-1 text-slate-300">•</span>
+                <span className="font-semibold text-slate-600">
+                  Quota remaining: <strong className="text-[#06969C]">{dailyQuota.remaining}</strong>/25
+                </span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleSendBatch}
-                disabled={sending || (outreachMode === 'multi' && selectedContactIds.length === 0)}
-                className="neo-btn-primary w-full sm:w-auto text-xs font-extrabold py-3.5 px-8 shadow-xl shadow-indigo-500/25 disabled:opacity-50"
-              >
-                {sending ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Sending Emails...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    {outreachMode === 'multi'
-                      ? `Send to All (${selectedContactIds.length})`
-                      : 'Send Email'}
-                  </>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                {outreachMode === 'multi' && selectedContactIds.length > dailyQuota.remaining && (
+                  <span className="text-xs font-bold text-rose-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Exceeds remaining quota ({dailyQuota.remaining} left)
+                  </span>
                 )}
-              </button>
+
+                <button
+                  type="button"
+                  onClick={handleSendBatch}
+                  disabled={
+                    sending ||
+                    dailyQuota.remaining === 0 ||
+                    (outreachMode === 'multi' && (selectedContactIds.length === 0 || selectedContactIds.length > dailyQuota.remaining))
+                  }
+                  className="neo-btn-primary w-full sm:w-auto text-xs font-extrabold py-3.5 px-8 shadow-xl shadow-indigo-500/25 disabled:opacity-50"
+                >
+                  {sending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Queueing Applications...
+                    </>
+                  ) : dailyQuota.remaining === 0 ? (
+                    'Daily Quota Limit Reached (25/25)'
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      {outreachMode === 'multi'
+                        ? `Queue & Send All (${selectedContactIds.length})`
+                        : 'Queue & Send Email'}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

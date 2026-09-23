@@ -58,7 +58,7 @@ const applicationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['DRAFT', 'SENT', 'FOLLOW_UP_DUE', 'REPLIED', 'INTERVIEW', 'OFFER', 'REJECTED'],
+    enum: ['DRAFT', 'QUEUED', 'PROCESSING', 'SENT', 'FOLLOW_UP_DUE', 'REPLIED', 'INTERVIEW', 'OFFER', 'REJECTED'],
     default: 'DRAFT',
     index: true,
   },
@@ -66,6 +66,17 @@ const applicationSchema = new mongoose.Schema({
     type: String,
     enum: ['PENDING', 'DELIVERED', 'FAILED', 'BOUNCED'],
     default: 'PENDING',
+  },
+  scheduledFor: {
+    type: Date,
+    index: true,
+  },
+  queuedAt: {
+    type: Date,
+  },
+  retryCount: {
+    type: Number,
+    default: 0,
   },
   sentAt: {
     type: Date,
@@ -96,5 +107,10 @@ const applicationSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
+
+// Compound indexes for ultra-fast queue execution, dashboard analytics, and daily quota counts
+applicationSchema.index({ userId: 1, createdAt: -1 });
+applicationSchema.index({ userId: 1, status: 1, scheduledFor: 1 });
+applicationSchema.index({ status: 1, scheduledFor: 1 });
 
 export const Application = mongoose.model('Application', applicationSchema);
